@@ -14,38 +14,39 @@ ANSIBLE_METADATA = {'metadata_version': '1.1',
 
 DOCUMENTATION = '''
 
-module: na_cdot_license
+module: na_ontap_license
 
-short_description: Manage NetApp cDOT protocol and feature licenses
+short_description: Manage NetApp Ontap protocol and feature licenses
 extends_documentation_fragment:
     - netapp.ontap
 version_added: '2.3'
-author: Sumit Kumar (sumit4@netapp.com)
+author: Sumit Kumar (sumit4@netapp.com), Archana Ganesan (garchana@netapp.com), Suhas Bangalore Shekar (bsuhas@netapp.com)
 
 description:
 - Add or remove licenses on NetApp ONTAP.
 
 options:
+  state:
+    description:
+    - Whether the specified license should exist or not.
+    choices: ['present', 'absent']
+    default: present
 
   remove_unused:
     description:
     - Remove licenses that have no controller affiliation in the cluster.
-    type: bool
 
   remove_expired:
     description:
     - Remove licenses that have expired in the cluster.
-    type: bool
 
   serial_number:
     description:
     - Serial number of the node associated with the license.
     - This parameter is used primarily when removing license for a specific service.
-    - If this parameter is not provided, the cluster serial number is used by default.
 
-  licenses:
-    description:
-    - List of licenses to add or remove.
+  license_names:
+    - List of license-names to delete.
     - Please note that trying to remove a non-existent license will throw an error.
     suboptions:
       base:
@@ -91,34 +92,31 @@ options:
         description:
           - Virtual Attached Storage License
 
+  license_codes:
+    description:
+    - List of license codes to be added.
+
 '''
 
 
 EXAMPLES = """
 - name: Add licenses
-  na_cdot_license:
+  na_ontap_license:
     hostname: "{{ netapp_hostname }}"
     username: "{{ netapp_username }}"
     password: "{{ netapp_password }}"
     serial_number: #################
-    licenses:
-      nfs: #################
-      cifs: #################
-      iscsi: #################
-      fcp: #################
-      snaprestore: #################
-      flexclone: #################
+    license_codes: CODE1,CODE2
 
 - name: Remove licenses
-  na_cdot_license:
+  na_ontap_license:
     hostname: "{{ netapp_hostname }}"
     username: "{{ netapp_username }}"
     password: "{{ netapp_password }}"
     remove_unused: false
     remove_expired: true
     serial_number: #################
-    licenses:
-      nfs: remove
+    license_names: nfs,cifs
 """
 
 RETURN = """
@@ -134,29 +132,32 @@ import ansible.module_utils.netapp as netapp_utils
 HAS_NETAPP_LIB = netapp_utils.has_netapp_lib()
 
 
-class NetAppCDOTLicense(object):
+class NetAppOntapLicense(object):
+    '''ONTAP license class'''
 
     def __init__(self):
         self.argument_spec = netapp_utils.ontap_sf_host_argument_spec()
         self.argument_spec.update(dict(
-            serial_number=dict(required=False, type='str', default=None),
-            remove_unused=dict(default=False, type='bool'),
-            remove_expired=dict(default=False, type='bool'),
-            licenses=dict(default=False, type='dict'),
+            state=dict(required=False, choices=['present', 'absent'], default='present'),
+            serial_number=dict(required=False, type='str'),
+            remove_unused=dict(default=None, type='bool'),
+            remove_expired=dict(default=None, type='bool'),
+            license_codes=dict(default=None, type='list'),
+            license_names=dict(default=None, type='list'),
         ))
-
         self.module = AnsibleModule(
             argument_spec=self.argument_spec,
-            supports_check_mode=False
+            supports_check_mode=False,
+            required_if=[('state', 'absent', ['serial_number', 'license_names'])]
         )
-
-        p = self.module.params
-
+        parameters = self.module.params
         # set up state variables
-        self.serial_number = p['serial_number']
-        self.remove_unused = p['remove_unused']
-        self.remove_expired = p['remove_expired']
-        self.licenses = p['licenses']
+        self.state = parameters['state']
+        self.serial_number = parameters['serial_number']
+        self.remove_unused = parameters['remove_unused']
+        self.remove_expired = parameters['remove_expired']
+        self.license_codes = parameters['license_codes']
+        self.license_names = parameters['license_names']
 
         if HAS_NETAPP_LIB is False:
             self.module.fail_json(msg="the python NetApp-Lib module is required")
@@ -174,10 +175,10 @@ class NetAppCDOTLicense(object):
         result = None
         try:
             result = self.server.invoke_successfully(license_status,
-                                                     enable_tunneling=False)
-        except netapp_utils.zapi.NaApiError as e:
+                                            enable_tunneling=False)
+        except netapp_utils.zapi.NaApiError as error:
             self.module.fail_json(msg="Error checking license status: %s" %
-                                  to_native(e), exception=traceback.format_exc())
+                                  to_native(error), exception=traceback.format_exc())
 
         return_dictionary = {}
         license_v2_status = result.get_child_by_name('license-v2-status')
@@ -189,26 +190,26 @@ class NetAppCDOTLicense(object):
 
         return return_dictionary
 
-    def remove_licenses(self, remove_list):
+    def remove_licenses(self, package_name):
         """
         Remove requested licenses
         :param:
-            remove_list : List of packages to remove
-
+          package_name: Name of the license to be deleted
         """
         license_delete = netapp_utils.zapi.NaElement('license-v2-delete')
-        for package in remove_list:
-            license_delete.add_new_child('package', package)
-
-        if self.serial_number is not None:
-            license_delete.add_new_child('serial-number', self.serial_number)
-
+        license_delete.add_new_child('serial-number', self.serial_number)
+        license_delete.add_new_child('package', package_name)
         try:
             self.server.invoke_successfully(license_delete,
                                             enable_tunneling=False)
-        except netapp_utils.zapi.NaApiError as e:
-            self.module.fail_json(msg="Error removing license %s" %
-                                  to_native(e), exception=traceback.format_exc())
+            return True
+        except netapp_utils.zapi.NaApiError as error:
+            # Error 15661 - Object not found
+            if to_native(error.code) == "15661":
+                return False
+            else:
+                self.module.fail_json(msg="Error removing license %s" %
+                                      to_native(error), exception=traceback.format_exc())
 
     def remove_unused_licenses(self):
         """
@@ -218,9 +219,9 @@ class NetAppCDOTLicense(object):
         try:
             self.server.invoke_successfully(remove_unused,
                                             enable_tunneling=False)
-        except netapp_utils.zapi.NaApiError as e:
+        except netapp_utils.zapi.NaApiError as error:
             self.module.fail_json(msg="Error removing unused licenses: %s" %
-                                  to_native(e), exception=traceback.format_exc())
+                                  to_native(error), exception=traceback.format_exc())
 
     def remove_expired_licenses(self):
         """
@@ -230,64 +231,73 @@ class NetAppCDOTLicense(object):
         try:
             self.server.invoke_successfully(remove_expired,
                                             enable_tunneling=False)
-        except netapp_utils.zapi.NaApiError as e:
+        except netapp_utils.zapi.NaApiError as error:
             self.module.fail_json(msg="Error removing expired licenses: %s" %
-                                  to_native(e), exception=traceback.format_exc())
+                                  to_native(error), exception=traceback.format_exc())
 
-    def update_licenses(self):
+    def add_licenses(self):
         """
-        Update licenses
+        Add licenses
         """
-        # Remove unused and expired licenses, if requested.
-        if self.remove_unused:
-            self.remove_unused_licenses()
-
-        if self.remove_expired:
-            self.remove_expired_licenses()
-
-        # Next, add/remove specific requested licenses.
         license_add = netapp_utils.zapi.NaElement('license-v2-add')
         codes = netapp_utils.zapi.NaElement('codes')
-        remove_list = []
-        for key, value in self.licenses.items():
-            str_value = str(value)
-            # Make sure license is not an empty string.
-            if str_value and str_value.strip():
-                if str_value.lower() == 'remove':
-                    remove_list.append(str(key).lower())
-                else:
-                    codes.add_new_child('license-code-v2', str_value)
-
-        # Remove requested licenses.
-        if not len(remove_list) == 0:
-            self.remove_licenses(remove_list)
-
-        # Add requested licenses
-        if not len(codes.get_children()) == 0:
-            license_add.add_child_elem(codes)
-            try:
-                self.server.invoke_successfully(license_add,
-                                                enable_tunneling=False)
-            except netapp_utils.zapi.NaApiError as e:
-                self.module.fail_json(msg="Error adding licenses: %s" %
-                                      to_native(e), exception=traceback.format_exc())
+        for code in self.license_codes:
+            codes.add_new_child('license-code-v2', str(code.strip().lower()))
+        license_add.add_child_elem(codes)
+        try:
+            self.server.invoke_successfully(license_add,
+                                            enable_tunneling=False)
+        except netapp_utils.zapi.NaApiError as error:
+            self.module.fail_json(msg="Error adding licenses: %s" %
+                                  to_native(error), exception=traceback.format_exc())
 
     def apply(self):
+        '''Call add, delete or modify methods'''
         changed = False
+        create_license = False
+        remove_license = False
+        results = netapp_utils.get_cserver(self.server)
+        cserver = netapp_utils.setup_ontap_zapi(module=self.module, vserver=results)
+        netapp_utils.ems_log_event("na_ontap_license", cserver)
         # Add / Update licenses.
         license_status = self.get_licensing_status()
-        self.update_licenses()
-        new_license_status = self.get_licensing_status()
 
-        if not license_status == new_license_status:
+        if self.state == 'absent': # delete
             changed = True
+        else: # add or update
+            if self.license_codes is not None:
+                create_license = True
+                changed = True
+            if self.remove_unused is not None:
+                remove_license = True
+                changed = True
+            if self.remove_expired is not None:
+                remove_license = True
+                changed = True
+        if changed:
+            if self.state == 'present': # execute create
+                if create_license:
+                    self.add_licenses()
+                if self.remove_unused is not None:
+                    self.remove_unused_licenses()
+                if self.remove_expired is not None:
+                    self.remove_expired_licenses()
+                if create_license or remove_license:
+                    new_license_status = self.get_licensing_status()
+                    if cmp(license_status, new_license_status) == 0:
+                        changed = False
+            else: # execute delete
+                license_deleted = False
+                for package in self.license_names:
+                    license_deleted |= self.remove_licenses(package)
+                    changed = license_deleted
 
         self.module.exit_json(changed=changed)
 
-
 def main():
-    v = NetAppCDOTLicense()
-    v.apply()
+    '''Apply license operations'''
+    obj = NetAppOntapLicense()
+    obj.apply()
 
 if __name__ == '__main__':
     main()

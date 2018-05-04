@@ -14,7 +14,7 @@ ANSIBLE_METADATA = {'metadata_version': '1.1',
 
 DOCUMENTATION = '''
 
-module: na_cdot_qtree
+module: na_ontap_qtree
 
 short_description: Manage qtrees
 extends_documentation_fragment:
@@ -30,13 +30,17 @@ options:
   state:
     description:
     - Whether the specified Qtree should exist or not.
-    required: true
     choices: ['present', 'absent']
+    default: 'present'
 
   name:
     description:
     - The name of the Qtree to manage.
     required: true
+
+  new_name:
+    description:
+    - New name of the Qtree to be renamed.
 
   flexvol_name:
     description:
@@ -51,7 +55,7 @@ options:
 
 EXAMPLES = """
 - name: Create QTree
-  na_cdot_qtree:
+  na_ontap_qtree:
     state: present
     name: ansibleQTree
     flexvol_name: ansibleVolume
@@ -61,7 +65,7 @@ EXAMPLES = """
     password: "{{ netapp_password }}"
 
 - name: Rename QTree
-  na_cdot_qtree:
+  na_ontap_qtree:
     state: present
     name: ansibleQTree
     flexvol_name: ansibleVolume
@@ -84,13 +88,14 @@ import ansible.module_utils.netapp as netapp_utils
 HAS_NETAPP_LIB = netapp_utils.has_netapp_lib()
 
 
-class NetAppCDOTQTree(object):
+class NetAppOntapQTree(object):
 
     def __init__(self):
         self.argument_spec = netapp_utils.ontap_sf_host_argument_spec()
         self.argument_spec.update(dict(
-            state=dict(required=True, choices=['present', 'absent']),
+            state=dict(required=False, choices=['present', 'absent'], default='present'),
             name=dict(required=True, type='str'),
+            new_name=dict(required=False, type='str'),
             flexvol_name=dict(type='str'),
             vserver=dict(required=True, type='str'),
         ))
@@ -108,6 +113,7 @@ class NetAppCDOTQTree(object):
         # set up state variables
         self.state = p['state']
         self.name = p['name']
+        self.new_name = p['new_name']
         self.flexvol_name = p['flexvol_name']
         self.vserver = p['vserver']
 
@@ -171,7 +177,7 @@ class NetAppCDOTQTree(object):
 
     def rename_qtree(self):
         path = '/vol/%s/%s' % (self.flexvol_name, self.name)
-        new_path = '/vol/%s/%s' % (self.flexvol_name, self.name)
+        new_path = '/vol/%s/%s' % (self.flexvol_name, self.new_name)
         qtree_rename = netapp_utils.zapi.NaElement.create_node_with_children(
             'qtree-rename', **{'qtree': path,
                                'new-qtree-name': new_path})
@@ -187,26 +193,19 @@ class NetAppCDOTQTree(object):
         changed = False
         qtree_exists = False
         rename_qtree = False
+        netapp_utils.ems_log_event("na_ontap_qtree", self.server)
         qtree_detail = self.get_qtree()
-
         if qtree_detail:
             qtree_exists = True
-
-            if self.state == 'absent':
-                # Qtree exists, but requested state is 'absent'.
+            if self.state == 'absent': #delete
                 changed = True
-
-            elif self.state == 'present':
-                if self.name is not None and not self.name == \
-                        self.name:
+            else: #rename
+                if self.new_name and self.name != self.new_name:
                     changed = True
                     rename_qtree = True
-
         else:
-            if self.state == 'present':
-                # Qtree does not exist, but requested state is 'present'.
+            if self.state == 'present': #create
                 changed = True
-
         if changed:
             if self.module.check_mode:
                 pass
@@ -214,19 +213,15 @@ class NetAppCDOTQTree(object):
                 if self.state == 'present':
                     if not qtree_exists:
                         self.create_qtree()
-
-                    else:
-                        if rename_qtree:
-                            self.rename_qtree()
-
+                    elif rename_qtree:
+                        self.rename_qtree()
                 elif self.state == 'absent':
                     self.delete_qtree()
 
         self.module.exit_json(changed=changed)
 
-
 def main():
-    v = NetAppCDOTQTree()
+    v = NetAppOntapQTree()
     v.apply()
 
 

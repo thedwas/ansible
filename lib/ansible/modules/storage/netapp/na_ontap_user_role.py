@@ -14,7 +14,7 @@ ANSIBLE_METADATA = {'metadata_version': '1.1',
 
 DOCUMENTATION = '''
 
-module: na_cdot_user_role
+module: na_ontap_user_role
 
 short_description: useradmin configuration and management
 extends_documentation_fragment:
@@ -59,7 +59,7 @@ options:
 EXAMPLES = """
 
     - name: Create User Role
-      na_cdot_user_role:
+      na_ontap_user_role:
         state: present
         name: ansibleRole
         command_directory_name: DEFAULT
@@ -84,18 +84,16 @@ import ansible.module_utils.netapp as netapp_utils
 HAS_NETAPP_LIB = netapp_utils.has_netapp_lib()
 
 
-class NetAppCDOTUserRole(object):
+class NetAppOntapUserRole(object):
 
     def __init__(self):
         self.argument_spec = netapp_utils.ontap_sf_host_argument_spec()
         self.argument_spec.update(dict(
-            state=dict(required=True, choices=['present', 'absent']),
+            state=dict(required=False, choices=['present', 'absent'], default='present'),
             name=dict(required=True, type='str'),
-
             command_directory_name=dict(required=True, type='str'),
             access_level=dict(required=False, type='str', default='all',
                               choices=['none', 'readonly', 'all']),
-
             vserver=dict(required=True, type='str'),
         ))
 
@@ -103,22 +101,18 @@ class NetAppCDOTUserRole(object):
             argument_spec=self.argument_spec,
             supports_check_mode=True
         )
-
         p = self.module.params
-
         # set up state variables
         self.state = p['state']
         self.name = p['name']
-
         self.command_directory_name = p['command_directory_name']
         self.access_level = p['access_level']
-
         self.vserver = p['vserver']
 
         if HAS_NETAPP_LIB is False:
             self.module.fail_json(msg="the python NetApp-Lib module is required")
         else:
-            self.server = netapp_utils.setup_ontap_zapi(module=self.module)
+            self.server = netapp_utils.setup_ontap_zapi(module=self.module, vserver=self.vserver)
 
     def get_role(self):
         """
@@ -137,7 +131,6 @@ class NetAppCDOTUserRole(object):
                                            'role-name': self.name,
                                            'command-directory-name':
                                                self.command_directory_name})
-
         query = netapp_utils.zapi.NaElement('query')
         query.add_child_elem(query_details)
         security_login_role_get_iter.add_child_elem(query)
@@ -152,7 +145,6 @@ class NetAppCDOTUserRole(object):
             else:
                 self.module.fail_json(msg='Error getting role %s: %s' % (self.name, to_native(e)),
                                       exception=traceback.format_exc())
-
         if (result.get_child_by_name('num-records') and
                 int(result.get_child_content('num-records')) >= 1):
             return True
@@ -167,7 +159,6 @@ class NetAppCDOTUserRole(object):
                                                  self.command_directory_name,
                                              'access-level':
                                                  self.access_level})
-
         try:
             self.server.invoke_successfully(role_create,
                                             enable_tunneling=False)
@@ -191,17 +182,14 @@ class NetAppCDOTUserRole(object):
 
     def apply(self):
         changed = False
+        netapp_utils.ems_log_event("na_ontap_user_role", self.server)
         role_exists = self.get_role()
-
         if role_exists:
             if self.state == 'absent':
                 changed = True
-
-            # Check if properties need to be updated
         else:
             if self.state == 'present':
                 changed = True
-
         if changed:
             if self.module.check_mode:
                 pass
@@ -209,17 +197,12 @@ class NetAppCDOTUserRole(object):
                 if self.state == 'present':
                     if not role_exists:
                         self.create_role()
-
-                    # Update properties
-
                 elif self.state == 'absent':
                     self.delete_role()
-
         self.module.exit_json(changed=changed)
 
-
 def main():
-    v = NetAppCDOTUserRole()
+    v = NetAppOntapUserRole()
     v.apply()
 
 if __name__ == '__main__':

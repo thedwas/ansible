@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-# (c) 2017, NetApp, Inc
+# (c) 2018, NetApp, Inc
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
 from __future__ import absolute_import, division, print_function
@@ -14,29 +14,34 @@ ANSIBLE_METADATA = {'metadata_version': '1.1',
 
 DOCUMENTATION = '''
 
-module: na_cdot_svm
+module: na_ontap_svm
 
-short_description: Manage NetApp cDOT svm
+short_description: Manage NetApp Ontap svm
 extends_documentation_fragment:
     - netapp.ontap
 version_added: '2.3'
-author: Sumit Kumar (sumit4@netapp.com)
+author: Sumit Kumar (sumit4@netapp.com), Archana Ganesan (garchana@netapp.com)
 
 description:
-- Create or destroy svm on NetApp cDOT
+- Create, modify or delete svm on NetApp Ontap
 
 options:
 
   state:
     description:
     - Whether the specified SVM should exist or not.
-    required: true
     choices: ['present', 'absent']
+    default: 'present'
 
   name:
     description:
     - The name of the SVM to manage.
     required: true
+
+  new_name:
+    description:
+    - New name of the SVM to be renamed
+    required: false
 
   root_volume:
     description:
@@ -58,12 +63,34 @@ options:
     -   Required when C(state=present)
     choices: ['unix', 'ntfs', 'mixed', 'unified']
 
+  allowed_protocols:
+    description:
+    - Allowed Protocols. 
+    - When specified as part of a vserver-create, this field represent the list of protocols allowed on the Vserver.
+    - When part of vserver-get-iter call, this will return the list of Vservers which have any of the protocols specified as part of the allowed-protocols. 
+    - When part of vserver-modify, this field should include the existing list along with new protocol list to be added to prevent data disruptions.
+    - Possible values
+    - nfs   NFS protocol,
+    - cifs   CIFS protocol,
+    - fcp   FCP protocol,
+    - iscsi   iSCSI protocol,
+    - ndmp   NDMP protocol,
+    - http   HTTP protocol,
+    - nvme   NVMe protocol 
+
+  aggr_list:
+    description:
+    - List of aggregates assigned for volume operations. 
+    - These aggregates could be shared for use with other Vservers.
+    - When specified as part of a vserver-create, this field represents the list of aggregates that are assigned to the Vserver for volume operations.
+    - When part of vserver-get-iter call, this will return the list of Vservers which have any of the aggregates specified as part of the aggr-list.
+
 '''
 
 EXAMPLES = """
 
     - name: Create SVM
-      na_cdot_svm:
+      na_ontap_svm:
         state: present
         name: ansibleVServer
         root_volume: vol1
@@ -88,13 +115,14 @@ import ansible.module_utils.netapp as netapp_utils
 HAS_NETAPP_LIB = netapp_utils.has_netapp_lib()
 
 
-class NetAppCDOTSVM(object):
+class NetAppOntapSVM(object):
 
     def __init__(self):
         self.argument_spec = netapp_utils.ontap_sf_host_argument_spec()
         self.argument_spec.update(dict(
-            state=dict(required=True, choices=['present', 'absent']),
+            state=dict(required=False, choices=['present', 'absent'], default='present'),
             name=dict(required=True, type='str'),
+            new_name=dict(required=False, type='str'),
             root_volume=dict(type='str'),
             root_volume_aggregate=dict(type='str'),
             root_volume_security_style=dict(type='str', choices=['unix',
@@ -102,15 +130,12 @@ class NetAppCDOTSVM(object):
                                                                  'mixed',
                                                                  'unified'
                                                                  ]),
+            allowed_protocols=dict(type='list'),
+            aggr_list=dict(type='list')
         ))
 
         self.module = AnsibleModule(
             argument_spec=self.argument_spec,
-            required_if=[
-                ('state', 'present', ['root_volume',
-                                      'root_volume_aggregate',
-                                      'root_volume_security_style'])
-            ],
             supports_check_mode=True
         )
 
@@ -119,9 +144,12 @@ class NetAppCDOTSVM(object):
         # set up state variables
         self.state = p['state']
         self.name = p['name']
+        self.new_name = p['new_name']
         self.root_volume = p['root_volume']
         self.root_volume_aggregate = p['root_volume_aggregate']
         self.root_volume_security_style = p['root_volume_security_style']
+        self.allowed_protocols = p['allowed_protocols']
+        self.aggr_list = p['aggr_list']
 
         if HAS_NETAPP_LIB is False:
             self.module.fail_json(msg="the python NetApp-Lib module is required")
@@ -148,29 +176,38 @@ class NetAppCDOTSVM(object):
 
         result = self.server.invoke_successfully(vserver_info,
                                                  enable_tunneling=False)
-
+        vserver_details = None
         if (result.get_child_by_name('num-records') and
                 int(result.get_child_content('num-records')) >= 1):
+            attributes_list = result.get_child_by_name('attributes-list')
+            vserver_info = attributes_list.get_child_by_name('vserver-info')
+            aggr_list = list()
+            ''' vserver aggr-list can be empty by default'''
+            get_list = vserver_info.get_child_by_name('aggr-list')
+            if get_list is not None:
+                aggregates = get_list.get_children()
+                for aggr in aggregates:
+                    aggr_list.append(aggr.get_content())
 
-            """
-            TODO:
-                Return more relevant parameters about vserver that can
-                be updated by the playbook.
-            """
-            return True
-        else:
-            return False
+            protocols = list()
+            '''allowed-protocols is not empty by default'''
+            get_protocols = vserver_info.get_child_by_name('allowed-protocols').get_children()
+            for protocol in get_protocols:
+                protocols.append(protocol.get_content())
+            vserver_details = {'name': vserver_info.get_child_content('vserver-name'),
+                               'aggr_list': aggr_list,
+                               'allowed_protocols': protocols}
+        return vserver_details
 
     def create_vserver(self):
-        vserver_create = netapp_utils.zapi.NaElement.create_node_with_children(
-            'vserver-create', **{'vserver-name': self.name,
-                                 'root-volume': self.root_volume,
-                                 'root-volume-aggregate':
-                                     self.root_volume_aggregate,
-                                 'root-volume-security-style':
-                                     self.root_volume_security_style
-                                 })
+        options ={'vserver-name': self.name, 'root-volume': self.root_volume}
+        if self.root_volume_aggregate is not None:
+            options['root-volume-aggregate'] = self.root_volume_aggregate
+        if self.root_volume_security_style is not None:
+            options['root-volume-security-style'] = self.root_volume_security_style
 
+        vserver_create = netapp_utils.zapi.NaElement.create_node_with_children(
+            'vserver-create', **options)
         try:
             self.server.invoke_successfully(vserver_create,
                                             enable_tunneling=False)
@@ -194,7 +231,7 @@ class NetAppCDOTSVM(object):
     def rename_vserver(self):
         vserver_rename = netapp_utils.zapi.NaElement.create_node_with_children(
             'vserver-rename', **{'vserver-name': self.name,
-                                 'new-name': self.name})
+                                 'new-name': self.new_name})
 
         try:
             self.server.invoke_successfully(vserver_rename,
@@ -203,34 +240,76 @@ class NetAppCDOTSVM(object):
             self.module.fail_json(msg='Error renaming SVM %s: %s' % (self.name, to_native(e)),
                                   exception=traceback.format_exc())
 
+    def modify_vserver(self, allowed_protocols, aggr_list):
+        vserver_modify = netapp_utils.zapi.NaElement.create_node_with_children(
+            'vserver-modify', **{'vserver-name': self.name})
+
+        if allowed_protocols:
+            allowed_protocols = netapp_utils.zapi.NaElement('allowed-protocols')
+            for protocol in self.allowed_protocols:
+                allowed_protocols.add_new_child('protocol', protocol)
+            vserver_modify.add_child_elem(allowed_protocols)
+
+        if aggr_list:
+            aggregates = netapp_utils.zapi.NaElement('aggr-list')
+            for aggr in self.aggr_list:
+                aggregates.add_new_child('aggr-name', aggr)
+            vserver_modify.add_child_elem(aggregates)
+
+        try:
+            self.server.invoke_successfully(vserver_modify,
+                                            enable_tunneling=False)
+        except netapp_utils.zapi.NaApiError as e:
+            self.module.fail_json(msg='Error modifying SVM %s: %s' % (self.name, to_native(e)),
+                                  exception=traceback.format_exc())
+
+
     def apply(self):
         changed = False
-        vserver_exists = self.get_vserver()
+        vserver_details = self.get_vserver()
+        if vserver_details is not None:
+            results = netapp_utils.get_cserver(self.server)
+            cserver = netapp_utils.setup_ontap_zapi(module=self.module, vserver=results)
+            netapp_utils.ems_log_event("na_ontap_svm", cserver)
+
         rename_vserver = False
-        if vserver_exists:
+        modify_protocols = False
+        modify_aggr_list = False
+        obj = open('vserver-log', 'a')
+        if vserver_details is not None:
             if self.state == 'absent':
                 changed = True
-
             elif self.state == 'present':
-                # Update properties
-                pass
-
+                if self.new_name is not None and self.new_name != self.name:
+                    rename_vserver = True
+                    changed = True
+                if self.allowed_protocols is not None:
+                    self.allowed_protocols.sort()
+                    vserver_details['allowed_protocols'].sort()
+                    if self.allowed_protocols !=  vserver_details['allowed_protocols']:
+                        modify_protocols = True
+                        changed = True
+                if self.aggr_list is not None:
+                    self.aggr_list.sort()
+                    vserver_details['aggr_list'].sort()
+                    if self.aggr_list != vserver_details['aggr_list']:
+                        modify_aggr_list = True
+                        changed = True
         else:
             if self.state == 'present':
                 changed = True
-
         if changed:
             if self.module.check_mode:
                 pass
             else:
                 if self.state == 'present':
-                    if not vserver_exists:
+                    if vserver_details is None:
                         self.create_vserver()
-
                     else:
                         if rename_vserver:
                             self.rename_vserver()
-
+                        if modify_protocols or modify_aggr_list:
+                            self.modify_vserver(modify_protocols, modify_aggr_list)
                 elif self.state == 'absent':
                     self.delete_vserver()
 
@@ -238,7 +317,7 @@ class NetAppCDOTSVM(object):
 
 
 def main():
-    v = NetAppCDOTSVM()
+    v = NetAppOntapSVM()
     v.apply()
 
 if __name__ == '__main__':
