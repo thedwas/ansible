@@ -1,10 +1,12 @@
-#!/usr/bin/python -utt
-''' this is ucadapter module 
+#!/usr/bin/python
 
- (c) 2018, NetApp, Inc
- # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
-'''
- 
+# (c) 2018, NetApp, Inc
+# GNU General Public License v3.0+
+# (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+
+from __future__ import absolute_import, division, print_function
+__metaclass__ = type
+
 ANSIBLE_METADATA = {
     'metadata_version': '1.1',
     'status': ['preview'],
@@ -14,11 +16,11 @@ ANSIBLE_METADATA = {
 DOCUMENTATION = '''
 ---
 
-module: na_ontap_adapte
+module: na_ontap_ucadapter
 short_description: ONTAP UC adapter configuration
 extends_documentation_fragment:
-    - netapp.ontap
-version_added: '2.4'
+    - netapp.na_ontap
+version_added: '2.6'
 author: chhaya gunawat (chhayag@netapp.com)
 
 description:
@@ -51,7 +53,7 @@ options:
     description:
     - Specifies the fc4 type of the adapter.
     required: false
-   
+
 '''
 
 EXAMPLES = '''
@@ -69,7 +71,6 @@ EXAMPLES = '''
 '''
 
 RETURN = '''
-    changed: True/False 
 '''
 
 import traceback
@@ -86,12 +87,12 @@ class NetAppOntapadapter(object):
 
     def __init__(self):
 
-        self.argument_spec = netapp_utils.ontap_sf_host_argument_spec()
+        self.argument_spec = netapp_utils.na_ontap_host_argument_spec()
         self.argument_spec.update(dict(
             state=dict(required=False, choices=['present'], default='present'),
             adapter_name=dict(required=True, type='str'),
             node_name=dict(required=True, type='str'),
-            mode =dict(required=False, type='str'),
+            mode=dict(required=False, type='str'),
             type=dict(required=False, type='str'),
         ))
 
@@ -106,13 +107,13 @@ class NetAppOntapadapter(object):
         self.state = params['state']
         self.adapter_name = params['adapter_name']
         self.node_name = params['node_name']
-        self.mode  = params['mode']
+        self.mode = params['mode']
         self.type = params['type']
 
         if HAS_NETAPP_LIB is False:
             self.module.fail_json(msg="the python NetApp-Lib module is required")
         else:
-            self.server = netapp_utils.setup_ontap_zapi(module=self.module)
+            self.server = netapp_utils.setup_na_ontap_zapi(module=self.module)
 
     def get_adapter(self):
         """
@@ -139,17 +140,16 @@ class NetAppOntapadapter(object):
         }
         return return_value
 
-
     def modify_adapter(self):
         """
         Modify the adapter.
-        """    
+        """
         params = {'adapter-name': self.adapter_name,
-                  'node-name': self.node_name} 
-        if self.type is not None:    
+                  'node-name': self.node_name}
+        if self.type is not None:
             params['fc4-type'] = self.type
         if self.mode is not None:
-            params['mode']= self.mode
+            params['mode'] = self.mode
         adapter_modify = netapp_utils.zapi.NaElement.create_node_with_children(
             'ucm-adapter-modify', ** params)
         try:
@@ -159,14 +159,14 @@ class NetAppOntapadapter(object):
             self.module.fail_json(msg='Error modifying adapter %s: %s' % (self.adapter_name, to_native(e)),
                                   exception=traceback.format_exc())
 
-
     def apply(self):
         ''' calling all adapter features '''
         changed = False
         results = netapp_utils.get_cserver(self.server)
-        cserver = netapp_utils.setup_ontap_zapi(module=self.module, vserver=results)
+        cserver = netapp_utils.setup_na_ontap_zapi(module=self.module, vserver=results)
         netapp_utils.ems_log_event("na_ontap_ucadapter", cserver)
         adapter_detail = self.get_adapter()
+
         def need_to_change(expected, pending, current):
             if expected is None:
                 return False
@@ -176,10 +176,9 @@ class NetAppOntapadapter(object):
                 return current != expected
             return False
 
-
         if adapter_detail:
             changed = need_to_change(self.type, adapter_detail['pending-type'], adapter_detail['type']) or \
-                      need_to_change(self.mode, adapter_detail['pending-mode'], adapter_detail['mode'])
+                need_to_change(self.mode, adapter_detail['pending-mode'], adapter_detail['mode'])
 
         if changed:
             if self.module.check_mode:
@@ -190,10 +189,10 @@ class NetAppOntapadapter(object):
         self.module.exit_json(changed=changed)
 
 
-
 def main():
     adapter = NetAppOntapadapter()
     adapter.apply()
+
 
 if __name__ == '__main__':
     main()

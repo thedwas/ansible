@@ -5,6 +5,9 @@
  # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 '''
 
+from __future__ import absolute_import, division, print_function
+__metaclass__ = type
+
 ANSIBLE_METADATA = {
     'metadata_version': '1.1',
     'status': ['preview'],
@@ -12,13 +15,12 @@ ANSIBLE_METADATA = {
 }
 
 DOCUMENTATION = '''
----
 
 module: na_ontap_igroup
 short_description: ONTAP iSCSI igroup configuration
 extends_documentation_fragment:
-    - netapp.ontap
-version_added: '2.4'
+    - netapp.na_ontap
+version_added: '2.6'
 author: chhaya gunawat (chhayag@netapp.com), Chris Archibald (carchi@netapp.com), Suhas Bangalore Shekar (bsuhas@netapp.com)
 
 description:
@@ -28,14 +30,13 @@ options:
   state:
     description:
     - Whether the specified Igroup should exist or not.
-    - required: false
     choices: ['present', 'absent']
     default: present
 
   name:
     description:
     - The name of the lun to manage.
-    - required: true
+    required: true
 
   initiator_group_type:
     description:
@@ -45,12 +46,10 @@ options:
   new_name:
     description:
     - New name to be given to initiator group..
-    - required: false.
 
   ostype:
     description:
     - OS type of the initiators within the group. The default value if not specified is "default".
-    - required: false
 
   initiator:
     description:
@@ -59,18 +58,17 @@ options:
   bind_portset:
     description:
     - Name of a current portset to bind to the newly created igroup.
-    - required: false
 
   force:
+    type: bool
     description:
     -  Forcibly remove the initiator even if there are existing LUNs mapped to this initiator group.
-    - required: false
-    
+
   vserver:
     description:
     - The name of the vserver to use.
-    - required: true
-   
+    required: true
+
 '''
 
 EXAMPLES = '''
@@ -128,15 +126,16 @@ class NetAppOntapIgroup(object):
 
     def __init__(self):
 
-        self.argument_spec = netapp_utils.ontap_sf_host_argument_spec()
+        self.argument_spec = netapp_utils.na_ontap_host_argument_spec()
         self.argument_spec.update(dict(
-            state=dict(required=False, choices=['present', 'absent'], default='present'),
+            state=dict(required=False, choices=[
+                       'present', 'absent'], default='present'),
             name=dict(required=True, type='str'),
             new_name=dict(required=False, type='str', default=None),
             ostype=dict(required=False, type='str'),
             initiator_group_type=dict(required=False, type='str'),
             initiator=dict(required=False, type='str'),
-            vserver=dict(required=True, type='str', default=None),
+            vserver=dict(required=True, type='str'),
             force=dict(required=False, type='bool', default=False),
             bind_portset=dict(required=False, type='str')
         ))
@@ -160,9 +159,11 @@ class NetAppOntapIgroup(object):
         self.bind_portset = params['bind_portset']
 
         if HAS_NETAPP_LIB is False:
-            self.module.fail_json(msg="the python NetApp-Lib module is required")
+            self.module.fail_json(
+                msg="the python NetApp-Lib module is required")
         else:
-            self.server = netapp_utils.setup_ontap_zapi(module=self.module, vserver=self.vserver)
+            self.server = netapp_utils.setup_na_ontap_zapi(
+                module=self.module, vserver=self.vserver)
 
     def get_igroup(self):
         """
@@ -240,7 +241,6 @@ class NetAppOntapIgroup(object):
             else:
                 self.module.fail_json(msg='Error removing igroup initiator %s: %s' % (self.name, to_native(error)),
                                       exception=traceback.format_exc())
-
 
     def create_igroup(self):
         """
@@ -341,9 +341,11 @@ class NetAppOntapIgroup(object):
 
         self.module.exit_json(changed=changed)
 
+
 def main():
     obj = NetAppOntapIgroup()
     obj.apply()
+
 
 if __name__ == '__main__':
     main()

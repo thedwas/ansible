@@ -6,7 +6,6 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
-
 ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['preview'],
                     'supported_by': 'community'}
@@ -15,9 +14,10 @@ DOCUMENTATION = '''
 module: na_ontap_broadcast_domain_ports
 short_description: Manage NetApp Ontap broadcast domain ports
 extends_documentation_fragment:
-    - netapp.ontap
-version_added: '1.0'
-author: Chris Archibald (carchi@netapp.com), Kevin Hutton (khutton@netapp.com), Suhas Bangalore Shekar (bsuhas@netapp.com)
+    - netapp.na_ontap
+version_added: '2.6'
+author:
+- Chris Archibald (carchi@netapp.com), Kevin Hutton (khutton@netapp.com), Suhas Bangalore Shekar (bsuhas@netapp.com)
 description:
 - Modify Ontap broadcast domain ports
 options:
@@ -67,13 +67,18 @@ EXAMPLES = """
         ports=khutton-vsim1:e0d-13
 """
 
-import traceback
+RETURN = """
 
+
+"""
+
+import traceback
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils._text import to_native
 import ansible.module_utils.netapp as netapp_utils
 
 HAS_NETAPP_LIB = netapp_utils.has_netapp_lib()
+
 
 class NetAppOntapBroadcastDomainPorts(object):
     """
@@ -83,13 +88,13 @@ class NetAppOntapBroadcastDomainPorts(object):
         """
             Initialize the Ontap Net Route class
         """
-        self.argument_spec = netapp_utils.ontap_sf_host_argument_spec()
+        self.argument_spec = netapp_utils.na_ontap_host_argument_spec()
         self.argument_spec.update(dict(
             state=dict(required=False, choices=['present', 'absent'], default='present'),
             vserver=dict(required=False, type='str'),
-            broadcast_domain=dict(required=True, type='str', default=None),
+            broadcast_domain=dict(required=True, type='str'),
             ipspace=dict(required=False, type='str', default=None),
-            ports=dict(required=True, type='list', default=None),
+            ports=dict(required=True, type='list'),
         ))
 
         self.module = AnsibleModule(
@@ -109,7 +114,7 @@ class NetAppOntapBroadcastDomainPorts(object):
         if HAS_NETAPP_LIB is False:
             self.module.fail_json(msg="the python NetApp-Lib module is required")
         else:
-            self.server = netapp_utils.setup_ontap_zapi(module=self.module)
+            self.server = netapp_utils.setup_na_ontap_zapi(module=self.module)
         return
 
     def get_broadcast_domain_ports(self):
@@ -131,8 +136,7 @@ class NetAppOntapBroadcastDomainPorts(object):
         # check if broadcast domain exists
         if result.get_child_by_name('num-records') and \
                 int(result.get_child_content('num-records')) == 1:
-            domain_info = result.get_child_by_name('attributes-list').\
-                                get_child_by_name('net-port-broadcast-domain-info')
+            domain_info = result.get_child_by_name('attributes-list').get_child_by_name('net-port-broadcast-domain-info')
             domain_name = domain_info.get_child_content('broadcast-domain')
             domain_ports = domain_info.get_child_content('port-info')
             domain_exists = {
@@ -163,8 +167,8 @@ class NetAppOntapBroadcastDomainPorts(object):
                 return False
             else:
                 self.module.fail_json(msg='Error creating port for broadcast domain %s: %s' %
-                                  (self.broadcast_domain, to_native(error)),
-                                  exception=traceback.format_exc())
+                                      (self.broadcast_domain, to_native(error)),
+                                      exception=traceback.format_exc())
 
     def delete_broadcast_domain_ports(self):
         """
@@ -188,8 +192,8 @@ class NetAppOntapBroadcastDomainPorts(object):
                 return False
             else:
                 self.module.fail_json(msg='Error deleting port for broadcast domain %s: %s' %
-                                  (self.broadcast_domain, to_native(error)),
-                                  exception=traceback.format_exc())
+                                      (self.broadcast_domain, to_native(error)),
+                                      exception=traceback.format_exc())
 
     def apply(self):
         """
@@ -199,13 +203,13 @@ class NetAppOntapBroadcastDomainPorts(object):
         broadcast_domain_details = self.get_broadcast_domain_ports()
         broadcast_domain_exists = False
         results = netapp_utils.get_cserver(self.server)
-        cserver = netapp_utils.setup_ontap_zapi(module=self.module, vserver=results)
+        cserver = netapp_utils.setup_na_ontap_zapi(module=self.module, vserver=results)
         netapp_utils.ems_log_event("na_ontap_broadcast_domain_ports", cserver)
         if broadcast_domain_details:
             broadcast_domain_exists = True
-            if self.state == 'absent': # delete
+            if self.state == 'absent':  # delete
                 changed = True
-            elif self.state == 'present': # create
+            elif self.state == 'present':  # create
                 changed = True
         else:
             pass
@@ -214,11 +218,12 @@ class NetAppOntapBroadcastDomainPorts(object):
                 pass
             else:
                 if broadcast_domain_exists:
-                    if self.state == 'present': # execute create
+                    if self.state == 'present':  # execute create
                         changed = self.create_broadcast_domain_ports()
-                    elif self.state == 'absent': # execute delete
+                    elif self.state == 'absent':  # execute delete
                         changed = self.delete_broadcast_domain_ports()
         self.module.exit_json(changed=changed)
+
 
 def main():
     """
@@ -226,6 +231,7 @@ def main():
     """
     obj = NetAppOntapBroadcastDomainPorts()
     obj.apply()
+
 
 if __name__ == '__main__':
     main()

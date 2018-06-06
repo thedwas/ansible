@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-# (c) 2017, NetApp, Inc
+# (c) 2018, NetApp, Inc
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
 from __future__ import absolute_import, division, print_function
@@ -16,10 +16,10 @@ DOCUMENTATION = '''
 
 module: na_ontap_license
 
-short_description: Manage NetApp Ontap protocol and feature licenses
+short_description: Manage NetApp ONTAP protocol and feature licenses
 extends_documentation_fragment:
-    - netapp.ontap
-version_added: '2.3'
+    - netapp.na_ontap
+version_added: '2.6'
 author: Sumit Kumar (sumit4@netapp.com), Archana Ganesan (garchana@netapp.com), Suhas Bangalore Shekar (bsuhas@netapp.com)
 
 description:
@@ -35,10 +35,12 @@ options:
   remove_unused:
     description:
     - Remove licenses that have no controller affiliation in the cluster.
+    type: bool
 
   remove_expired:
     description:
     - Remove licenses that have expired in the cluster.
+    type: bool
 
   serial_number:
     description:
@@ -46,6 +48,7 @@ options:
     - This parameter is used primarily when removing license for a specific service.
 
   license_names:
+    description:
     - List of license-names to delete.
     - Please note that trying to remove a non-existent license will throw an error.
     suboptions:
@@ -102,6 +105,7 @@ options:
 EXAMPLES = """
 - name: Add licenses
   na_ontap_license:
+    state: present
     hostname: "{{ netapp_hostname }}"
     username: "{{ netapp_username }}"
     password: "{{ netapp_password }}"
@@ -110,6 +114,7 @@ EXAMPLES = """
 
 - name: Remove licenses
   na_ontap_license:
+    state: absent
     hostname: "{{ netapp_hostname }}"
     username: "{{ netapp_username }}"
     password: "{{ netapp_password }}"
@@ -132,13 +137,18 @@ import ansible.module_utils.netapp as netapp_utils
 HAS_NETAPP_LIB = netapp_utils.has_netapp_lib()
 
 
+def local_cmp(a, b):
+    return (a > b) - (a < b)
+
+
 class NetAppOntapLicense(object):
     '''ONTAP license class'''
 
     def __init__(self):
-        self.argument_spec = netapp_utils.ontap_sf_host_argument_spec()
+        self.argument_spec = netapp_utils.na_ontap_host_argument_spec()
         self.argument_spec.update(dict(
-            state=dict(required=False, choices=['present', 'absent'], default='present'),
+            state=dict(required=False, choices=[
+                       'present', 'absent'], default='present'),
             serial_number=dict(required=False, type='str'),
             remove_unused=dict(default=None, type='bool'),
             remove_expired=dict(default=None, type='bool'),
@@ -148,7 +158,8 @@ class NetAppOntapLicense(object):
         self.module = AnsibleModule(
             argument_spec=self.argument_spec,
             supports_check_mode=False,
-            required_if=[('state', 'absent', ['serial_number', 'license_names'])]
+            required_if=[
+                ('state', 'absent', ['serial_number', 'license_names'])]
         )
         parameters = self.module.params
         # set up state variables
@@ -160,9 +171,10 @@ class NetAppOntapLicense(object):
         self.license_names = parameters['license_names']
 
         if HAS_NETAPP_LIB is False:
-            self.module.fail_json(msg="the python NetApp-Lib module is required")
+            self.module.fail_json(
+                msg="the python NetApp-Lib module is required")
         else:
-            self.server = netapp_utils.setup_ontap_zapi(module=self.module)
+            self.server = netapp_utils.setup_na_ontap_zapi(module=self.module)
 
     def get_licensing_status(self):
         """
@@ -171,11 +183,12 @@ class NetAppOntapLicense(object):
             :return: package (key) and licensing status (value)
             :rtype: dict
         """
-        license_status = netapp_utils.zapi.NaElement('license-v2-status-list-info')
+        license_status = netapp_utils.zapi.NaElement(
+            'license-v2-status-list-info')
         result = None
         try:
             result = self.server.invoke_successfully(license_status,
-                                            enable_tunneling=False)
+                                                     enable_tunneling=False)
         except netapp_utils.zapi.NaApiError as error:
             self.module.fail_json(msg="Error checking license status: %s" %
                                   to_native(error), exception=traceback.format_exc())
@@ -227,7 +240,8 @@ class NetAppOntapLicense(object):
         """
         Remove expired licenses
         """
-        remove_expired = netapp_utils.zapi.NaElement('license-v2-delete-expired')
+        remove_expired = netapp_utils.zapi.NaElement(
+            'license-v2-delete-expired')
         try:
             self.server.invoke_successfully(remove_expired,
                                             enable_tunneling=False)
@@ -257,14 +271,15 @@ class NetAppOntapLicense(object):
         create_license = False
         remove_license = False
         results = netapp_utils.get_cserver(self.server)
-        cserver = netapp_utils.setup_ontap_zapi(module=self.module, vserver=results)
+        cserver = netapp_utils.setup_na_ontap_zapi(
+            module=self.module, vserver=results)
         netapp_utils.ems_log_event("na_ontap_license", cserver)
         # Add / Update licenses.
         license_status = self.get_licensing_status()
 
-        if self.state == 'absent': # delete
+        if self.state == 'absent':  # delete
             changed = True
-        else: # add or update
+        else:  # add or update
             if self.license_codes is not None:
                 create_license = True
                 changed = True
@@ -275,7 +290,7 @@ class NetAppOntapLicense(object):
                 remove_license = True
                 changed = True
         if changed:
-            if self.state == 'present': # execute create
+            if self.state == 'present':  # execute create
                 if create_license:
                     self.add_licenses()
                 if self.remove_unused is not None:
@@ -284,9 +299,9 @@ class NetAppOntapLicense(object):
                     self.remove_expired_licenses()
                 if create_license or remove_license:
                     new_license_status = self.get_licensing_status()
-                    if cmp(license_status, new_license_status) == 0:
+                    if local_cmp(license_status, new_license_status) == 0:
                         changed = False
-            else: # execute delete
+            else:  # execute delete
                 license_deleted = False
                 for package in self.license_names:
                     license_deleted |= self.remove_licenses(package)
@@ -294,10 +309,12 @@ class NetAppOntapLicense(object):
 
         self.module.exit_json(changed=changed)
 
+
 def main():
     '''Apply license operations'''
     obj = NetAppOntapLicense()
     obj.apply()
+
 
 if __name__ == '__main__':
     main()

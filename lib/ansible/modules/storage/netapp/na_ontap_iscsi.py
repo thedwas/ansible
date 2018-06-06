@@ -1,7 +1,8 @@
 #!/usr/bin/python
 
 # (c) 2017, NetApp, Inc
-# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+# GNU General Public License v3.0+
+# (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
@@ -16,11 +17,12 @@ DOCUMENTATION = '''
 
 module: na_ontap_iscsi
 
-short_description: Manage NetApp Ontap iscsi service  
+short_description: Manage NetApp Ontap iscsi service
 extends_documentation_fragment:
-    - netapp.ontap
-version_added: '2.4'
-author: Chhaya Gunawat (chhayag@netapp.com), Laurent Nicolas (laurentn@netapp.com)
+    - netapp.na_ontap
+version_added: '2.6'
+author:
+- Chhaya Gunawat (chhayag@netapp.com), Laurent Nicolas (laurentn@netapp.com)
 
 description:
 - create, delete, start, stop iscsi service on svm.
@@ -30,14 +32,12 @@ options:
   state:
     description:
     - Whether the specified service  should running .
-    required: false
     choices: ['present', 'absent']
     default: present
 
   service_state:
     description:
     - Whether the specified service  should running .
-    required: false
     choices: ['started', 'stopped']
 
   vserver:
@@ -50,7 +50,8 @@ options:
 EXAMPLES = """
 - name: Create iscsi service
   na_ontap_iscsi:
-    state: started
+    state: present
+    service_state: started
     vserver: ansibleVServer
     hostname: "{{ netapp_hostname }}"
     username: "{{ netapp_username }}"
@@ -58,7 +59,8 @@ EXAMPLES = """
 
 - name: Stop Iscsi service
   na_ontap_iscsi:
-    state: stopped
+    state: present
+    service_state: stopped
     vserver: ansibleVServer
     hostname: "{{ netapp_hostname }}"
     username: "{{ netapp_username }}"
@@ -74,8 +76,9 @@ EXAMPLES = """
 """
 
 RETURN = """
-    changed: True/False
+
 """
+
 import traceback
 
 from ansible.module_utils.basic import AnsibleModule
@@ -89,10 +92,12 @@ class NetAppOntapISCSI(object):
 
     def __init__(self):
 
-        self.argument_spec = netapp_utils.ontap_sf_host_argument_spec()
+        self.argument_spec = netapp_utils.na_ontap_host_argument_spec()
         self.argument_spec.update(dict(
-            state=dict(required=False, choices=['present', 'absent'], default='present'),
-            service_state=dict(required=False, choices=['started', 'stopped'], default=None),
+            state=dict(required=False, choices=[
+                       'present', 'absent'], default='present'),
+            service_state=dict(required=False, choices=[
+                               'started', 'stopped'], default=None),
             vserver=dict(required=True, type='str'),
         ))
 
@@ -112,10 +117,11 @@ class NetAppOntapISCSI(object):
         self.is_started = None
 
         if HAS_NETAPP_LIB is False:
-            self.module.fail_json(msg="the python NetApp-Lib module is required")
+            self.module.fail_json(
+                msg="the python NetApp-Lib module is required")
         else:
-            self.server = netapp_utils.setup_ontap_zapi(module=self.module, vserver=self.vserver)
-    
+            self.server = netapp_utils.setup_na_ontap_zapi(
+                module=self.module, vserver=self.vserver)
 
     def get_iscsi(self):
         """
@@ -126,7 +132,7 @@ class NetAppOntapISCSI(object):
         """
         iscsi_info = netapp_utils.zapi.NaElement('iscsi-service-get-iter')
         iscsi_attributes = netapp_utils.zapi.NaElement('iscsi-service-info')
-       
+
         iscsi_attributes.add_new_child('vserver', self.vserver)
 
         query = netapp_utils.zapi.NaElement('query')
@@ -140,33 +146,36 @@ class NetAppOntapISCSI(object):
         if result.get_child_by_name('num-records') and \
                 int(result.get_child_content('num-records')) >= 1:
 
-            iscsi = result.get_child_by_name('attributes-list').get_child_by_name('iscsi-service-info')
+            iscsi = result.get_child_by_name(
+                'attributes-list').get_child_by_name('iscsi-service-info')
             if iscsi:
                 is_started = iscsi.get_child_content('is-available') == 'true'
                 return_value = {
-                        'is_started': is_started
-                        }
+                    'is_started': is_started
+                }
 
         return return_value
 
     def create_iscsi_service(self):
         """
-        Create iscsi service and start if requested 
+        Create iscsi service and start if requested
         """
         iscsi_service = netapp_utils.zapi.NaElement.create_node_with_children(
-                        'iscsi-service-create', 
-                        **{'start': 'true' if self.state == 'started' else 'false'
-                           })
+            'iscsi-service-create',
+            **{'start': 'true' if self.state == 'started' else 'false'
+               })
 
         try:
-            self.server.invoke_successfully(iscsi_service, enable_tunneling=True)
+            self.server.invoke_successfully(
+                iscsi_service, enable_tunneling=True)
         except netapp_utils.zapi.NaApiError as e:
-            self.module.fail_json(msg="Error creating iscsi service: % s" % (to_native(e)),
+            self.module.fail_json(msg="Error creating iscsi service: % s"
+                                  % (to_native(e)),
                                   exception=traceback.format_exc())
 
     def delete_iscsi_service(self):
         """
-         Delete the iscsi service 
+         Delete the iscsi service
         """
         if self.is_started:
             self.stop_iscsi_service()
@@ -175,41 +184,47 @@ class NetAppOntapISCSI(object):
             'iscsi-service-destroy')
 
         try:
-            self.server.invoke_successfully(iscsi_delete, enable_tunneling=True)
+            self.server.invoke_successfully(
+                iscsi_delete, enable_tunneling=True)
         except netapp_utils.zapi.NaApiError as e:
-            self.module.fail_json(msg="Error deleting iscsi service on vserver %s: %s" % (self.vserver, to_native(e)),
+            self.module.fail_json(msg="Error deleting iscsi service \
+                                  on vserver %s: %s"
+                                  % (self.vserver, to_native(e)),
                                   exception=traceback.format_exc())
+
     def stop_iscsi_service(self):
         """
-         Stop iscsi service 
+         Stop iscsi service
         """
-       
+
         iscsi_stop = netapp_utils.zapi.NaElement.create_node_with_children(
             'iscsi-service-stop')
 
         try:
             self.server.invoke_successfully(iscsi_stop, enable_tunneling=True)
         except netapp_utils.zapi.NaApiError as e:
-            self.module.fail_json(msg="Error Stopping iscsi service on vserver %s: %s" % (self.vserver, to_native(e)),
+            self.module.fail_json(msg="Error Stopping iscsi service \
+                                  on vserver %s: %s"
+                                  % (self.vserver, to_native(e)),
                                   exception=traceback.format_exc())
 
     def start_iscsi_service(self):
         """
-        Start iscsi service 
+        Start iscsi service
         """
-       
         iscsi_start = netapp_utils.zapi.NaElement.create_node_with_children(
             'iscsi-service-start')
 
         try:
             self.server.invoke_successfully(iscsi_start, enable_tunneling=True)
         except netapp_utils.zapi.NaApiError as e:
-            self.module.fail_json(msg="Error Starting iscsi service on vserver %s: %s" % (self.vserver, to_native(e)),
+            self.module.fail_json(msg="Error starting iscsi service \
+                                  on vserver %s: %s"
+                                  % (self.vserver, to_native(e)),
                                   exception=traceback.format_exc())
-    
+
     def apply(self):
         property_changed = False
-        
         iscsi_service_exists = False
         netapp_utils.ems_log_event("na_ontap_iscsi", self.server)
         iscsi_service_detail = self.get_iscsi()
@@ -222,7 +237,7 @@ class NetAppOntapISCSI(object):
                 property_changed = True
 
             elif self.state == 'present':
-                is_started = 'started' if self.is_started else 'stopped' 
+                is_started = 'started' if self.is_started else 'stopped'
                 property_changed = is_started != self.service_state
 
         else:

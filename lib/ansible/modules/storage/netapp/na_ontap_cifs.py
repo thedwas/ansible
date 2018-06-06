@@ -1,17 +1,11 @@
-'''cifs-share module'''
 #!/usr/bin/python
 
 # (c) 2018, NetApp, Inc
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 # import untangle
+
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
-
-import traceback
-
-from ansible.module_utils.basic import AnsibleModule
-from ansible.module_utils._text import to_native
-import ansible.module_utils.netapp as netapp_utils
 
 ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['preview'],
@@ -19,32 +13,35 @@ ANSIBLE_METADATA = {'metadata_version': '1.1',
 
 DOCUMENTATION = '''
 author: "Archana Ganesan (garchana@netapp.com), Suhas Bangalore Shekar (bsuhas@netapp.com)"
-description: 
+description:
   - "Create or destroy or modify(path) cifs-share on ONTAP"
-extends_documentation_fragment: 
-  - netapp.ontap
+extends_documentation_fragment:
+  - netapp.na_ontap
 module: na_ontap_cifs
-options: 
-  path: 
-    description: 
-      - "The file system path that is shared through this CIFS share. The path is the full, user visible path relative to the vserver root, and it might be crossing junction mount points. The path is in UTF8 and uses forward slash as directory separator"
+options:
+  path:
+    description:
+      - "The file system path that is shared through this CIFS share. The path is the full, user visible path relative "
+      - "to the vserver root, and it might be crossing junction mount points. The path is in UTF8 and uses forward "
+      - "slash as directory separator"
     required: false
   vserver:
     description:
       - "Vserver containing the CIFS share."
     required: true
-  share_name: 
-    description: 
-      - "The name of the CIFS share. The CIFS share name is a UTF-8 string with the following characters being illegal; control characters from 0x00 to 0x1F, both inclusive, 0x22 (double quotes)"
+  share_name:
+    description:
+      - "The name of the CIFS share. The CIFS share name is a UTF-8 string with the following characters being "
+      - "illegal; control characters from 0x00 to 0x1F, both inclusive, 0x22 (double quotes)"
     required: true
-  state: 
+  state:
     choices: ['present', 'absent']
-    description: 
+    description:
       - "Whether the specified CIFS share should exist or not."
     required: false
     default: present
 short_description: "Manage NetApp cifs-share"
-version_added: "1.0"
+version_added: "2.6"
 
 '''
 
@@ -80,6 +77,13 @@ EXAMPLES = """
 RETURN = """
 """
 
+
+import traceback
+
+from ansible.module_utils.basic import AnsibleModule
+from ansible.module_utils._text import to_native
+import ansible.module_utils.netapp as netapp_utils
+
 HAS_NETAPP_LIB = netapp_utils.has_netapp_lib()
 
 
@@ -89,9 +93,10 @@ class NetAppONTAPCifsShare(object):
     """
 
     def __init__(self):
-        self.argument_spec = netapp_utils.ontap_sf_host_argument_spec()
+        self.argument_spec = netapp_utils.na_ontap_host_argument_spec()
         self.argument_spec.update(dict(
-            state=dict(required=False, type='str', choices=['present', 'absent'], default='present'),
+            state=dict(required=False, type='str', choices=[
+                       'present', 'absent'], default='present'),
             share_name=dict(required=True, type='str'),
             path=dict(required=False, type='str'),
             vserver=dict(required=True, type='str')
@@ -114,9 +119,11 @@ class NetAppONTAPCifsShare(object):
         self.vserver = parameters['vserver']
 
         if HAS_NETAPP_LIB is False:
-            self.module.fail_json(msg="the python NetApp-Lib module is required")
+            self.module.fail_json(
+                msg="the python NetApp-Lib module is required")
         else:
-            self.server = netapp_utils.setup_ontap_zapi(module=self.module, vserver=self.vserver)
+            self.server = netapp_utils.setup_na_ontap_zapi(
+                module=self.module, vserver=self.vserver)
 
     def get_cifs_share(self):
         """
@@ -144,7 +151,7 @@ class NetAppONTAPCifsShare(object):
                 int(result.get_child_content('num-records')) == 1:
 
             cifs_acl = result.get_child_by_name('attributes-list').\
-                                   get_child_by_name('cifs-share')
+                get_child_by_name('cifs-share')
             return_value = {
                 'share': cifs_acl.get_child_content('share-name'),
                 'path': cifs_acl.get_child_content('path'),
@@ -165,7 +172,7 @@ class NetAppONTAPCifsShare(object):
                                             enable_tunneling=True)
         except netapp_utils.zapi.NaApiError as error:
 
-            self.module.fail_json(msg='Error creating cifs-share %s: %s'\
+            self.module.fail_json(msg='Error creating cifs-share %s: %s'
                                   % (self.share_name, to_native(error)),
                                   exception=traceback.format_exc())
 
@@ -180,7 +187,7 @@ class NetAppONTAPCifsShare(object):
             self.server.invoke_successfully(cifs_delete,
                                             enable_tunneling=True)
         except netapp_utils.zapi.NaApiError as error:
-            self.module.fail_json(msg='Error deleting cifs-share %s: %s'\
+            self.module.fail_json(msg='Error deleting cifs-share %s: %s'
                                   % (self.share_name, to_native(error)),
                                   exception=traceback.format_exc())
 
@@ -207,25 +214,25 @@ class NetAppONTAPCifsShare(object):
         cifs_details = self.get_cifs_share()
         if cifs_details:
             cifs_exists = True
-            if self.state == 'absent': # delete
+            if self.state == 'absent':  # delete
                 changed = True
             elif self.state == 'present':
-                if cifs_details['path'] != self.path: # modify path
+                if cifs_details['path'] != self.path:  # modify path
                     changed = True
         else:
-            if self.state == 'present': # create
+            if self.state == 'present':  # create
                 changed = True
 
         if changed:
             if self.module.check_mode:
                 pass
             else:
-                if self.state == 'present': # execute create
+                if self.state == 'present':  # execute create
                     if not cifs_exists:
                         self.create_cifs_share()
-                    else: # execute modify path
+                    else:  # execute modify path
                         self.modify_cifs_share()
-                elif self.state == 'absent': # execute delete
+                elif self.state == 'absent':  # execute delete
                     self.delete_cifs_share()
 
         self.module.exit_json(changed=changed)
@@ -235,6 +242,7 @@ def main():
     '''Execute action from playbook'''
     cifs_obj = NetAppONTAPCifsShare()
     cifs_obj.apply()
+
 
 if __name__ == '__main__':
     main()

@@ -13,13 +13,13 @@ ANSIBLE_METADATA = {'metadata_version': '1.1',
 
 DOCUMENTATION = '''
 module: na_ontap_broadcast_domain
-short_description: Manage NetApp Ontap broadcast domains.
+short_description: Manage NetApp ONTAP broadcast domains.
 extends_documentation_fragment:
-    - netapp.ontap
+    - netapp.na_ontap
 version_added: '2.6'
 author: Chris Archibald (carchi8py@gmail.com), Kevin Hutton (khutton@netapp.com), Suhas Bangalore Shekar (bsuhas@netapp.com)
 description:
-- Modify a Ontap broadcast domain.
+- Modify a ONTAP broadcast domain.
 options:
   state:
     description:
@@ -64,13 +64,18 @@ EXAMPLES = """
         ipspace=Default
     - name: modify broadcast domain
       na_ontap_broadcast_domain:
-        state=modify
+        state=absent
         username={{ netapp_username }}
         password={{ netapp_password }}
         hostname={{ netapp_hostname }}
         broadcast_domain=123kevin
         mtu=1100
         ipspace=Default
+"""
+
+RETURN = """
+
+
 """
 import traceback
 
@@ -80,15 +85,16 @@ import ansible.module_utils.netapp as netapp_utils
 
 HAS_NETAPP_LIB = netapp_utils.has_netapp_lib()
 
+
 class NetAppOntapBroadcastDomain(object):
     """
         Create, Modifies and Destroys a Broadcast domain
     """
     def __init__(self):
         """
-            Initialize the Ontap Net Route class
+            Initialize the ONTAP Broadcast Domain class
         """
-        self.argument_spec = netapp_utils.ontap_sf_host_argument_spec()
+        self.argument_spec = netapp_utils.na_ontap_host_argument_spec()
         self.argument_spec.update(dict(
             state=dict(required=False, choices=['present', 'absent'], default='present'),
             broadcast_domain=dict(required=True, type='str'),
@@ -114,7 +120,7 @@ class NetAppOntapBroadcastDomain(object):
         if HAS_NETAPP_LIB is False:
             self.module.fail_json(msg="the python NetApp-Lib module is required")
         else:
-            self.server = netapp_utils.setup_ontap_zapi(module=self.module)
+            self.server = netapp_utils.setup_na_ontap_zapi(module=self.module)
         return
 
     def get_broadcast_domain(self):
@@ -137,7 +143,7 @@ class NetAppOntapBroadcastDomain(object):
         if result.get_child_by_name('num-records') and \
                 int(result.get_child_content('num-records')) == 1:
             domain_info = result.get_child_by_name('attributes-list').\
-                                get_child_by_name('net-port-broadcast-domain-info')
+                get_child_by_name('net-port-broadcast-domain-info')
             domain_name = domain_info.get_child_content('broadcast-domain')
             domain_mtu = domain_info.get_child_content('mtu')
             domain_ipspace = domain_info.get_child_content('ipspace')
@@ -209,35 +215,36 @@ class NetAppOntapBroadcastDomain(object):
         broadcast_domain_details = self.get_broadcast_domain()
         broadcast_domain_exists = False
         results = netapp_utils.get_cserver(self.server)
-        cserver = netapp_utils.setup_ontap_zapi(module=self.module, vserver=results)
+        cserver = netapp_utils.setup_na_ontap_zapi(module=self.module, vserver=results)
         netapp_utils.ems_log_event("na_ontap_broadcast_domain", cserver)
         if broadcast_domain_details:
             broadcast_domain_exists = True
-            if self.state == 'absent': # delete
+            if self.state == 'absent':  # delete
                 changed = True
-            elif self.state == 'present': # modify
+            elif self.state == 'present':  # modify
                 if (self.mtu and self.mtu != broadcast_domain_details['mtu']) or \
-                    (self.ipspace and self.ipspace != broadcast_domain_details['ipspace']):
+                   (self.ipspace and self.ipspace != broadcast_domain_details['ipspace']):
                     changed = True
         else:
-            if self.state == 'present': # create
+            if self.state == 'present':  # create
                 changed = True
         if changed:
             if self.module.check_mode:
                 pass
             else:
-                if self.state == 'present': # execute create
+                if self.state == 'present':  # execute create
                     if not broadcast_domain_exists:
                         self.create_broadcast_domain()
-                    else: # execute modify
+                    else:  # execute modify
                         self.modify_broadcast_domain()
-                elif self.state == 'absent': # execute delete
+                elif self.state == 'absent':  # execute delete
                     self.delete_broadcast_domain()
         self.module.exit_json(changed=changed)
 
+
 def main():
     """
-    Creates the NetApp Ontap Net Route object and runs the correct play task
+    Creates the NetApp ONTAP Broadcast Domain Object that can be created, deleted and modified.
     """
     obj = NetAppOntapBroadcastDomain()
     obj.apply()

@@ -1,7 +1,8 @@
 #!/usr/bin/python
 
 # (c) 2018, NetApp, Inc
-# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+# GNU General Public License v3.0+
+# (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
@@ -15,38 +16,45 @@ DOCUMENTATION = '''
 module: na_ontap_snapshot
 short_description: Manage NetApp Sanpshots
 extends_documentation_fragment:
-    - netapp.ontap
-version_added: '1.0'
-author: Chris Archibald (carchi@netapp.com), Kevin Hutton (khutton@netapp.com)
+    - netapp.na_ontap
+version_added: '2.6'
+author:
+- Chris Archibald (carchi@netapp.com), Kevin Hutton (khutton@netapp.com)
 description:
 - Create/Modify/Delete Ontap snapshots
 options:
   state:
     description:
-    - If you want to create/modify a snapshot, or delete it
-    chocies: ['present', 'absent']
-    default: 'present'
+    - If you want to create/modify a snapshot, or delete it.
+    choices: ['present', 'absent']
+    default: present
   snapshot:
     description:
-    - Name of the snapshot to be created. The maximum string length is 256 characters.
+    - Name of the snapshot to be created.
+    - The maximum string length is 256 characters.
     required: true
   volume:
     description:
     - Name of the volume on which the snapshot is to be created.
     required: true
-  async:
+  async_bool:
     description:
     - If true, the snapshot is to be created asynchronously.
+    type: bool
   comment:
     description:
-    - A human readable comment attached with the snapshot. The size of the comment can be at most 255 characters.
+    - A human readable comment attached with the snapshot.
+    - The size of the comment can be at most 255 characters.
   snapmirror_label:
     description:
-    - A human readable SnapMirror Label attached with the snapshot. Size of the label can be at most 31 characters.
+    - A human readable SnapMirror Label attached with the snapshot.
+    - Size of the label can be at most 31 characters.
     required: false
   ignore_owners:
     description:
-    - if this field is true, snapshot will be deleted even if some other processes are accessing it.
+    - if this field is true, snapshot will be deleted
+      even if some other processes are accessing it.
+    type: bool
   snapshot_instance_uuid:
     description:
     - The 128 bit unique snapshot identifier expressed in the form of UUID.
@@ -55,7 +63,9 @@ options:
     - The Vserver name
   new_comment:
     description:
-    - A human readable comment attached with the snapshot. The size of the comment can be at most 255 characters. This will replace the existing comment
+    - A human readable comment attached with the snapshot.
+    - The size of the comment can be at most 255 characters.
+    - This will replace the existing comment
 '''
 EXAMPLES = """
     - name: create SnapShot
@@ -95,6 +105,8 @@ EXAMPLES = """
         hostname={{ netapp hostname }}
 """
 
+RETURN = """
+"""
 import traceback
 
 from ansible.module_utils.basic import AnsibleModule
@@ -103,17 +115,20 @@ import ansible.module_utils.netapp as netapp_utils
 
 HAS_NETAPP_LIB = netapp_utils.has_netapp_lib()
 
+
 class NetAppOntapSnapshot(object):
     """
     Creates, modifies, and deletes a Snapshot
     """
+
     def __init__(self):
-        self.argument_spec = netapp_utils.ontap_sf_host_argument_spec()
+        self.argument_spec = netapp_utils.na_ontap_host_argument_spec()
         self.argument_spec.update(dict(
-            state=dict(required=False, choices=['present', 'absent'], default='present'),
+            state=dict(required=False, choices=[
+                       'present', 'absent'], default='present'),
             snapshot=dict(required=True, type="str"),
             volume=dict(required=True, type="str"),
-            async=dict(required=False, type="bool", default=False),
+            async_bool=dict(required=False, type="bool", default=False),
             comment=dict(required=False, type="str"),
             snapmirror_label=dict(required=False, type="str"),
             ignore_owners=dict(required=False, type="bool", default=False),
@@ -136,19 +151,22 @@ class NetAppOntapSnapshot(object):
         self.vserver = parameters['vserver']
         # these are the optional variables for creating a snapshot
         self.volume = parameters['volume']
-        self.async = parameters['async']
+        self.async_bool = parameters['async_bool']
         self.comment = parameters['comment']
         self.snapmirror_label = parameters['snapmirror_label']
         # these are the optional variables for deleting a snapshot\
         self.ignore_owners = parameters['ignore_owners']
         self.snapshot_instance_uuid = parameters['snapshot_instance_uuid']
-        # These are the optional for Modify. You can NOT change a snapcenter name
+        # These are the optional for Modify.
+        # You can NOT change a snapcenter name
         self.new_comment = parameters['new_comment']
 
         if HAS_NETAPP_LIB is False:
-            self.module.fail_json(msg="the python NetApp-Lib module is required")
+            self.module.fail_json(
+                msg="the python NetApp-Lib module is required")
         else:
-            self.server = netapp_utils.setup_ontap_zapi(module=self.module, vserver=self.vserver)
+            self.server = netapp_utils.setup_na_ontap_zapi(
+                module=self.module, vserver=self.vserver)
         return
 
     def create_snapshot(self):
@@ -161,12 +179,13 @@ class NetAppOntapSnapshot(object):
         snapshot_obj.add_new_child("snapshot", self.snapshot)
         snapshot_obj.add_new_child("volume", self.volume)
         # Set up optional variables to create a snapshot
-        if self.async:
-            snapshot_obj.add_new_child("async", self.async)
+        if self.async_bool:
+            snapshot_obj.add_new_child("async", self.async_bool)
         if self.comment:
             snapshot_obj.add_new_child("comment", self.comment)
         if self.snapmirror_label:
-            snapshot_obj.add_new_child("snapmirror-label", self.snapmirror_label)
+            snapshot_obj.add_new_child(
+                "snapmirror-label", self.snapmirror_label)
         try:
             self.server.invoke_successfully(snapshot_obj, True)
         except netapp_utils.zapi.NaApiError as error:
@@ -187,7 +206,8 @@ class NetAppOntapSnapshot(object):
         if self.ignore_owners:
             snapshot_obj.add_new_child("ignore-owners", self.ignore_owners)
         if self.snapshot_instance_uuid:
-            snapshot_obj.add_new_child("snapshot-instance-uuid", self.snapshot_instance_uuid)
+            snapshot_obj.add_new_child(
+                "snapshot-instance-uuid", self.snapshot_instance_uuid)
         try:
             self.server.invoke_successfully(snapshot_obj, True)
         except netapp_utils.zapi.NaApiError as error:
@@ -244,7 +264,8 @@ class NetAppOntapSnapshot(object):
         snapshot_obj.add_child_elem(query)
         result = self.server.invoke_successfully(snapshot_obj, True)
         return_value = None
-        # TODO: Snapshot with the same name will mess this up, need to fix that later
+        # TODO: Snapshot with the same name will mess this up,
+        # need to fix that later
         if result.get_child_by_name('num-records') and \
                 int(result.get_child_content('num-records')) == 1:
             attributes_list = result.get_child_by_name('attributes-list')
@@ -285,6 +306,7 @@ class NetAppOntapSnapshot(object):
 
         self.module.exit_json(changed=changed)
 
+
 def main():
     """
     Creates, modifies, and deletes a Snapshot
@@ -292,6 +314,7 @@ def main():
 
     obj = NetAppOntapSnapshot()
     obj.apply()
+
 
 if __name__ == '__main__':
     main()

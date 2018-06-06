@@ -12,12 +12,12 @@ ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'supported_by': 'community'}
 
 
-DOCUMENTATION = '''
+DOCUMENTATION = """
 module: na_ontap_nfs
 short_description: Manage Ontap NFS status
 extends_documentation_fragment:
-    - netapp.ontap
-version_added: '1.0'
+    - netapp.na_ontap
+version_added: '2.6'
 author: Suhas Bangalore Shekar  (bsuhas@netapp.com)
 description:
 - Enable or disable nfs on ONTAP
@@ -26,6 +26,7 @@ options:
     description:
     - Whether nfs should exist or not.
     choices: ['present', 'absent']
+    default: present
   service_state:
     description:
     - Whether the specified nfs should be enabled or disabled. Creates nfs service if doesnt exist.
@@ -35,49 +36,42 @@ options:
     description:
     - Name of the vserver to use.
     required: true
-    default: None
   nfsv3:
     description:
     - status of nfsv3.
     required: false
-    default: None
     choices: ['enabled', 'disabled']
   nfsv4:
     description:
     - status of nfsv4.
     required: false
-    default: None
     choices: ['enabled', 'disabled']
   nfsv41:
     description:
     - status of nfsv41.
+    aliases: ['nfsv4.1']
     required: false
-    default: None
     choices: ['enabled', 'disabled']
   vstorage_state:
     description:
     - status of vstorage_state.
     required: false
-    default: None
     choices: ['enabled', 'disabled']
   nfsv4_id_domain:
     description:
     - Name of the nfsv4_id_domain to use.
     required: false
-    default: None
   tcp:
     description:
     - Name of the tcp to use.
     required: false
-    default: None
     choices: ['enabled', 'disabled']
   udp:
     description:
     - Name of the udp to use.
     required: false
-    default: None
     choices: ['enabled', 'disabled']
-'''
+"""
 
 EXAMPLES = """
     - name: change nfs status
@@ -110,14 +104,14 @@ HAS_NETAPP_LIB = netapp_utils.has_netapp_lib()
 
 
 class NetAppONTAPNFS(object):
-    ''' object initialize and class methods '''
+    """ object initialize and class methods """
     def __init__(self):
 
-        self.argument_spec = netapp_utils.ontap_sf_host_argument_spec()
+        self.argument_spec = netapp_utils.na_ontap_host_argument_spec()
         self.argument_spec.update(dict(
             state=dict(required=False, type='str', choices=['present', 'absent'], default='present'),
             service_state=dict(required=False, choices=['started', 'stopped']),
-            vserver=dict(required=True, type='str', default=None),
+            vserver=dict(required=True, type='str'),
             nfsv3=dict(required=False, default=None, choices=['enabled', 'disabled']),
             nfsv4=dict(required=False, default=None, choices=['enabled', 'disabled']),
             nfsv41=dict(required=False, default=None, choices=['enabled', 'disabled'], aliases=['nfsv4.1']),
@@ -149,7 +143,7 @@ class NetAppONTAPNFS(object):
         if HAS_NETAPP_LIB is False:
             self.module.fail_json(msg="the python NetApp-Lib module is required")
         else:
-            self.server = netapp_utils.setup_ontap_zapi(module=self.module, vserver=self.vserver)
+            self.server = netapp_utils.setup_na_ontap_zapi(module=self.module, vserver=self.vserver)
 
     def get_nfs_service(self):
         """
@@ -170,8 +164,7 @@ class NetAppONTAPNFS(object):
         # check if job exists
         if result.get_child_by_name('num-records') and \
                 int(result.get_child_content('num-records')) >= 1:
-            attributes_list = result.get_child_by_name('attributes-list').\
-                                get_child_by_name('nfs-info')
+            attributes_list = result.get_child_by_name('attributes-list').get_child_by_name('nfs-info')
             is_nfsv3_enabled = attributes_list.get_child_content('is-nfsv3-enabled')
             is_nfsv40_enabled = attributes_list.get_child_content('is-nfsv40-enabled')
             is_nfsv41_enabled = attributes_list.get_child_content('is-nfsv41-enabled')
@@ -264,7 +257,7 @@ class NetAppONTAPNFS(object):
             self.server.invoke_successfully(nfs_modify,
                                             enable_tunneling=True)
         except netapp_utils.zapi.NaApiError as error:
-            self.module.fail_json(msg='Error modifying nfs: %s'\
+            self.module.fail_json(msg='Error modifying nfs: %s'
                                   % (to_native(error)),
                                   exception=traceback.format_exc())
 
@@ -272,7 +265,6 @@ class NetAppONTAPNFS(object):
         """
         modify nfs service
         """
-        nfsv4_id_domain_modify = None
         nfsv4_id_domain_modify = netapp_utils.zapi.NaElement.create_node_with_children(
             'nfs-service-modify', **{'nfsv4-id-domain': self.nfsv4_id_domain})
         if nfsv4_id_domain_modify is not None:
@@ -280,7 +272,7 @@ class NetAppONTAPNFS(object):
                 self.server.invoke_successfully(nfsv4_id_domain_modify,
                                                 enable_tunneling=True)
             except netapp_utils.zapi.NaApiError as error:
-                self.module.fail_json(msg='Error modifying nfs: %s'\
+                self.module.fail_json(msg='Error modifying nfs: %s'
                                       % (to_native(error)),
                                       exception=traceback.format_exc())
 
@@ -298,7 +290,7 @@ class NetAppONTAPNFS(object):
                                   exception=traceback.format_exc())
 
     def apply(self):
-        '''Apply action to nfs'''
+        """Apply action to nfs"""
         changed = False
         nfs_exists = False
         modify_nfs = False
@@ -317,12 +309,12 @@ class NetAppONTAPNFS(object):
             return True
 
         def is_modify_needed():
-            if (((self.nfsv3 is not None) and state_changed(self.nfsv3, nfs_service_details['is_nfsv3_enabled'])) or \
-                ((self.nfsv4 is not None) and state_changed(self.nfsv4, nfs_service_details['is_nfsv40_enabled'])) or \
-                ((self.nfsv41 is not None) and state_changed(self.nfsv41, nfs_service_details['is_nfsv41_enabled'])) or \
-                ((self.tcp is not None) and state_changed(self.tcp, nfs_service_details['is_tcp_enabled'])) or \
-                ((self.udp is not None) and state_changed(self.udp, nfs_service_details['is_udp_enabled'])) or \
-                ((self.vstorage_state is not None) and state_changed(self.vstorage_state, nfs_service_details['is_vstorage_enabled']))):
+            if (((self.nfsv3 is not None) and state_changed(self.nfsv3, nfs_service_details['is_nfsv3_enabled'])) or
+                ((self.nfsv4 is not None) and state_changed(self.nfsv4, nfs_service_details['is_nfsv40_enabled'])) or
+                ((self.nfsv41 is not None) and state_changed(self.nfsv41, nfs_service_details['is_nfsv41_enabled'])) or
+                ((self.tcp is not None) and state_changed(self.tcp, nfs_service_details['is_tcp_enabled'])) or
+                ((self.udp is not None) and state_changed(self.udp, nfs_service_details['is_udp_enabled'])) or
+                    ((self.vstorage_state is not None) and state_changed(self.vstorage_state, nfs_service_details['is_vstorage_enabled']))):
                 return True
             return False
 
@@ -333,9 +325,9 @@ class NetAppONTAPNFS(object):
 
         if nfs_service_details:
             nfs_exists = True
-            if self.state == 'absent': # delete
+            if self.state == 'absent':  # delete
                 changed = True
-            elif self.state == 'present': # modify
+            elif self.state == 'present':  # modify
                 if self.service_state == 'started' and nfs_enabled == 'false':
                     enable_nfs = True
                     changed = True
@@ -349,13 +341,13 @@ class NetAppONTAPNFS(object):
                     is_nfsv4_id_domain_changed = True
                     changed = True
         else:
-            if self.state == 'present': # create
+            if self.state == 'present':  # create
                 changed = True
         if changed:
             if self.module.check_mode:
                 pass
             else:
-                if self.state == 'present': # execute create
+                if self.state == 'present':  # execute create
                     if not nfs_exists:
                         self.enable_nfs()
                         nfs_service_details = self.get_nfs_service()
@@ -374,16 +366,17 @@ class NetAppONTAPNFS(object):
                             self.modify_nfs()
                         if is_nfsv4_id_domain_changed:
                             self.modify_nfsv4_id_domain()
-                elif self.state == 'absent': # execute delete
+                elif self.state == 'absent':  # execute delete
                     self.delete_nfs()
 
         self.module.exit_json(changed=changed)
 
 
 def main():
-    ''' Create object and call apply '''
+    """ Create object and call apply """
     obj = NetAppONTAPNFS()
     obj.apply()
+
 
 if __name__ == '__main__':
     main()

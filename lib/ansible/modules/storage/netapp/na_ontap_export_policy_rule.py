@@ -14,58 +14,59 @@ ANSIBLE_METADATA = {'metadata_version': '1.1',
 
 DOCUMENTATION = '''
 
-module: na_ontap_export_rule
+module: na_ontap_export_policy_rule
 
 short_description: Manage ONTAP Export rules
 extends_documentation_fragment:
-    - netapp.ontap
-version_added: '2.5'
+    - netapp.na_ontap
+version_added: '2.6'
 author: Suhas Bangalore Shekar (bsuhas@netapp.com), Archana Ganeshan (garchana@netapp.com)
 
 description:
 - Create or delete or modify export rules in ONTAP
 
 options:
-
   state:
     description:
     - Whether the specified export policy rule should exist or not.
+    required: false
     choices: ['present', 'absent']
-    default: 'present'
-    
+    default: present
+
   policy_name:
     description:
     - The name of the export rule to manage.
     required: True
-    
+
   client_match:
     description:
     - List of Client Match Hostnames, IP Addresses, Netgroups, or Domains
-    
+
   ro_rule:
-    description: 
+    description:
     - Read only access specifications for the rule
     choices: ['any','none','never','krb5','krb5i','krb5p','ntlm','sys']
-    
+
   rw_rule:
     description:
     - Read Write access specifications for the rule
     choices: ['any','none','never','krb5','krb5i','krb5p','ntlm','sys']
-    
+
   super_user_security:
     description:
     - Read Write access specifications for the rule
     choices: ['any','none','never','krb5','krb5i','krb5p','ntlm','sys']
-    
+
   allow_suid:
     description:
     - If 'true', NFS server will honor SetUID bits in SETATTR operation. Default value is 'true'
-    choices: [true, false]
-    
+    choices: ['True', 'False']
+
   protocol:
     description:
     - Client access protocol. Default value is 'any'
     choices: [any,nfs,nfs3,nfs4,cifs,flexcache]
+    default: any
 
   rule_index:
     description:
@@ -79,7 +80,6 @@ options:
 '''
 
 EXAMPLES = """
-
     - name: Create ExportPolicyRule
       na_ontap_export_policy_rule:
         state: present
@@ -94,15 +94,15 @@ EXAMPLES = """
         hostname: "{{ netapp_hostname }}"
         username: "{{ netapp_username }}"
         password: "{{ netapp_password }}"
-        
+
     - name: Delete ExportPolicyRule
-      na_ontap_volume:
+      na_ontap_export_policy_rule:
         state: absent
         policy_name: default123
         hostname: "{{ netapp_hostname }}"
         username: "{{ netapp_username }}"
         password: "{{ netapp_password }}"
-        
+
     - name: Modify ExportPolicyRule
       na_ontap_export_policy_rule:
         state: present
@@ -135,26 +135,27 @@ HAS_NETAPP_LIB = netapp_utils.has_netapp_lib()
 
 class NetAppontapExportRule(object):
     ''' object initialize and class methods '''
+
     def __init__(self):
-    
-        self.argument_spec = netapp_utils.ontap_sf_host_argument_spec()
+
+        self.argument_spec = netapp_utils.na_ontap_host_argument_spec()
         self.argument_spec.update(dict(
-            state=dict(required=False, choices=['present', 'absent'], defaut='present'),
+            state=dict(required=False, type='str', choices=['present', 'absent'], default='present'),
             policy_name=dict(required=True, type='str'),
-            protocol=dict(required=False, \
-                            type='str', default='any', \
-                            choices=['any', 'nfs', 'nfs3', 'nfs4', 'cifs', 'flexcache']),
+            protocol=dict(required=False,
+                          type='str', default='any',
+                          choices=['any', 'nfs', 'nfs3', 'nfs4', 'cifs', 'flexcache']),
             client_match=dict(required=False, type='str'),
-            ro_rule=dict(required=False, \
-                            type='str', default=None, \
-                            choices=['any', 'none', 'never', 'krb5', 'krb5i', 'krb5p', 'ntlm', 'sys']),
-            rw_rule=dict(required=False, \
-                            type='str', default=None, \
-                            choices=['any', 'none', 'never', 'krb5', 'krb5i', 'krb5p', 'ntlm', 'sys']),
-            super_user_security=dict(required=False, \
-                            type='str', default=None, \
-                            choices=['any', 'none', 'never', 'krb5', 'krb5i', 'krb5p', 'ntlm', 'sys']),
-            allow_suid=dict(required=False, choices=['true', 'false']),
+            ro_rule=dict(required=False,
+                         type='str', default=None,
+                         choices=['any', 'none', 'never', 'krb5', 'krb5i', 'krb5p', 'ntlm', 'sys']),
+            rw_rule=dict(required=False,
+                         type='str', default=None,
+                         choices=['any', 'none', 'never', 'krb5', 'krb5i', 'krb5p', 'ntlm', 'sys']),
+            super_user_security=dict(required=False,
+                                     type='str', default=None,
+                                     choices=['any', 'none', 'never', 'krb5', 'krb5i', 'krb5p', 'ntlm', 'sys']),
+            allow_suid=dict(required=False, choices=['True', 'False']),
             rule_index=dict(required=False, type='int', default=None),
             vserver=dict(required=True, type='str'),
         ))
@@ -182,9 +183,11 @@ class NetAppontapExportRule(object):
         self.super_user_security = parameters['super_user_security']
 
         if HAS_NETAPP_LIB is False:
-            self.module.fail_json(msg="the python NetApp-Lib module is required")
+            self.module.fail_json(
+                msg="the python NetApp-Lib module is required")
         else:
-            self.server = netapp_utils.setup_ontap_zapi(module=self.module, vserver=self.vserver)
+            self.server = netapp_utils.setup_na_ontap_zapi(
+                module=self.module, vserver=self.vserver)
 
     def get_export_policy_rule(self):
         """
@@ -214,16 +217,25 @@ class NetAppontapExportRule(object):
                 int(result.get_child_content('num-records')) == 1:
 
             export_policy_rule_details = result.get_child_by_name('attributes-list').\
-                                 get_child_by_name('export-rule-info')
-            export_policy_name = export_policy_rule_details.get_child_content('policy-name')
-            export_rule_index = export_policy_rule_details.get_child_content('rule-index')
-            export_rule_protocol = export_policy_rule_details.get_child_by_name('protocol').get_child_content('access-protocol')
-            export_rule_ro_rule = export_policy_rule_details.get_child_by_name('ro-rule').get_child_content('security-flavor')
-            export_rule_rw_rule = export_policy_rule_details.get_child_by_name('rw-rule').get_child_content('security-flavor')
-            export_rule_super_user_security = export_policy_rule_details.get_child_by_name('super-user-security').get_child_content('security-flavor')
-            export_rule_allow_suid = export_policy_rule_details.get_child_content('is-allow-set-uid-enabled')
-            export_rule_client_match = export_policy_rule_details.get_child_content('client-match')
-            export_vserver = export_policy_rule_details.get_child_content('vserver-name')
+                get_child_by_name('export-rule-info')
+            export_policy_name = export_policy_rule_details.get_child_content(
+                'policy-name')
+            export_rule_index = export_policy_rule_details.get_child_content(
+                'rule-index')
+            export_rule_protocol = export_policy_rule_details.get_child_by_name(
+                'protocol').get_child_content('access-protocol')
+            export_rule_ro_rule = export_policy_rule_details.get_child_by_name(
+                'ro-rule').get_child_content('security-flavor')
+            export_rule_rw_rule = export_policy_rule_details.get_child_by_name(
+                'rw-rule').get_child_content('security-flavor')
+            export_rule_super_user_security = export_policy_rule_details.get_child_by_name(
+                'super-user-security').get_child_content('security-flavor')
+            export_rule_allow_suid = export_policy_rule_details.get_child_content(
+                'is-allow-set-uid-enabled')
+            export_rule_client_match = export_policy_rule_details.get_child_content(
+                'client-match')
+            export_vserver = export_policy_rule_details.get_child_content(
+                'vserver-name')
             return_value = {
                 'policy-name': export_policy_name,
                 'rule-index': export_rule_index,
@@ -248,11 +260,12 @@ class NetAppontapExportRule(object):
         Return details about the export-policy
         :param:
             name : Name of the export-policy
-            
+
         :return: Details about the export-policy. None if not found.
         :rtype: dict
         """
-        export_policy_iter = netapp_utils.zapi.NaElement('export-policy-get-iter')
+        export_policy_iter = netapp_utils.zapi.NaElement(
+            'export-policy-get-iter')
         export_policy_info = netapp_utils.zapi.NaElement('export-policy-info')
         export_policy_info.add_new_child('policy-name', self.policy_name)
         export_policy_info.add_new_child('vserver', self.vserver)
@@ -271,8 +284,8 @@ class NetAppontapExportRule(object):
                 int(result.get_child_content('num-records')) == 1:
 
             result.get_child_by_name('attributes-list').\
-                                 get_child_by_name('export-policy-info').\
-                                 get_child_by_name('policy-name')
+                get_child_by_name('export-policy-info').\
+                get_child_by_name('policy-name')
             return_value = {
                 'policy-name': self.policy_name
             }
@@ -288,25 +301,29 @@ class NetAppontapExportRule(object):
                 'export-rule-create', **{'policy-name': self.policy_name,
                                          'client-match': self.client_match,
                                          'is-allow-set-uid-enabled': str(self.allow_suid)
-                                        })
+                                         })
         else:
             export_rule_create = netapp_utils.zapi.NaElement.create_node_with_children(
                 'export-rule-create', **{'policy-name': self.policy_name,
                                          'client-match': self.client_match
-                                        })
-        export_rule_create.add_node_with_children('ro-rule', **{'security-flavor': self.ro_rule})
-        export_rule_create.add_node_with_children('rw-rule', **{'security-flavor': self.rw_rule})
+                                         })
+        export_rule_create.add_node_with_children(
+            'ro-rule', **{'security-flavor': self.ro_rule})
+        export_rule_create.add_node_with_children(
+            'rw-rule', **{'security-flavor': self.rw_rule})
         if self.protocol:
-            export_rule_create.add_node_with_children('protocol', **{'access-protocol': self.protocol})
+            export_rule_create.add_node_with_children(
+                'protocol', **{'access-protocol': self.protocol})
         if self.super_user_security:
-            export_rule_create.add_node_with_children('super-user-security', **{'security-flavor': self.super_user_security})
+            export_rule_create.add_node_with_children(
+                'super-user-security', **{'security-flavor': self.super_user_security})
 
         try:
             self.server.invoke_successfully(export_rule_create,
                                             enable_tunneling=True)
         except netapp_utils.zapi.NaApiError as error:
-            self.module.fail_json(msg='Error creating export policy rule %s: %s' \
-                                    % (self.policy_name, to_native(error)),
+            self.module.fail_json(msg='Error creating export policy rule %s: %s'
+                                  % (self.policy_name, to_native(error)),
                                   exception=traceback.format_exc())
 
     def create_export_policy(self):
@@ -319,7 +336,7 @@ class NetAppontapExportRule(object):
             self.server.invoke_successfully(export_policy_create,
                                             enable_tunneling=True)
         except netapp_utils.zapi.NaApiError as error:
-            self.module.fail_json(msg='Error creating export-policy %s: %s'\
+            self.module.fail_json(msg='Error creating export-policy %s: %s'
                                   % (self.policy_name, to_native(error)),
                                   exception=traceback.format_exc())
 
@@ -335,8 +352,8 @@ class NetAppontapExportRule(object):
             self.server.invoke_successfully(export_rule_delete,
                                             enable_tunneling=True)
         except netapp_utils.zapi.NaApiError as error:
-            self.module.fail_json(msg='Error deleting export policy rule %s: %s' \
-                                    % (self.policy_name, to_native(error)),
+            self.module.fail_json(msg='Error deleting export policy rule %s: %s'
+                                  % (self.policy_name, to_native(error)),
                                   exception=traceback.format_exc())
 
     def modify_protocol(self, rule_index):
@@ -347,7 +364,8 @@ class NetAppontapExportRule(object):
             'export-rule-modify',
             **{'policy-name': self.policy_name,
                'rule-index': rule_index})
-        export_rule_modify_protocol.add_node_with_children('protocol', **{'access-protocol': self.protocol})
+        export_rule_modify_protocol.add_node_with_children(
+            'protocol', **{'access-protocol': self.protocol})
         try:
             self.server.invoke_successfully(export_rule_modify_protocol,
                                             enable_tunneling=True)
@@ -363,7 +381,8 @@ class NetAppontapExportRule(object):
             'export-rule-modify',
             **{'policy-name': self.policy_name,
                'rule-index': rule_index})
-        export_rule_modify_ro_rule.add_node_with_children('ro-rule', **{'security-flavor': self.ro_rule})
+        export_rule_modify_ro_rule.add_node_with_children(
+            'ro-rule', **{'security-flavor': self.ro_rule})
         try:
             self.server.invoke_successfully(export_rule_modify_ro_rule,
                                             enable_tunneling=True)
@@ -379,7 +398,8 @@ class NetAppontapExportRule(object):
             'export-rule-modify',
             **{'policy-name': self.policy_name,
                'rule-index': rule_index})
-        export_rule_modify_rw_rule.add_node_with_children('rw-rule', **{'security-flavor': self.rw_rule})
+        export_rule_modify_rw_rule.add_node_with_children(
+            'rw-rule', **{'security-flavor': self.rw_rule})
         try:
             self.server.invoke_successfully(export_rule_modify_rw_rule,
                                             enable_tunneling=True)
@@ -395,7 +415,8 @@ class NetAppontapExportRule(object):
             'export-rule-modify',
             **{'policy-name': self.policy_name,
                'rule-index': rule_index})
-        export_rule_modify_super_user_security.add_node_with_children('super-user-security', **{'security-flavor': self.super_user_security})
+        export_rule_modify_super_user_security.add_node_with_children(
+            'super-user-security', **{'security-flavor': self.super_user_security})
         try:
             self.server.invoke_successfully(export_rule_modify_super_user_security,
                                             enable_tunneling=True)
@@ -419,7 +440,6 @@ class NetAppontapExportRule(object):
             self.module.fail_json(msg='Error modifying allow_suid %s: %s' % (self.allow_suid, to_native(error)),
                                   exception=traceback.format_exc())
 
-
     def apply(self):
         '''Apply action to export-policy'''
         changed = False
@@ -438,39 +458,39 @@ class NetAppontapExportRule(object):
                 self.create_export_policy()
         export_policy_rule_exists = self.get_export_policy_rule()
         if self.state == 'absent':
-            if export_policy_rule_exists: # delete
+            if export_policy_rule_exists:  # delete
                 changed = True
                 rule_index = export_policy_rule_exists['rule-index']
 
         elif self.state == 'present':
-            if export_policy_rule_exists: # modify
+            if export_policy_rule_exists:  # modify
                 rule_index = export_policy_rule_exists['rule-index']
                 if rule_index:
                     if (self.protocol is not None) and \
-                        (export_policy_rule_exists['protocol'] != self.protocol):
+                            (export_policy_rule_exists['protocol'] != self.protocol):
                         export_rule_protocol_changed = True
                         changed = True
                     if self.ro_rule is not None and \
-                        (export_policy_rule_exists['ro-rule'] != self.ro_rule):
+                            (export_policy_rule_exists['ro-rule'] != self.ro_rule):
                         export_rule_ro_rule_changed = True
                         changed = True
                     if self.rw_rule is not None and \
-                        (export_policy_rule_exists['rw-rule'] != self.rw_rule):
+                            (export_policy_rule_exists['rw-rule'] != self.rw_rule):
                         export_rule_rw_rule_changed = True
                         changed = True
                     if (self.allow_suid is not None) and \
-                        (export_policy_rule_exists['is-allow-set-uid-enabled'] != self.allow_suid):
+                            (export_policy_rule_exists['is-allow-set-uid-enabled'] != self.allow_suid):
                         export_rule_allow_suid_enabled = True
                         changed = True
                     if (self.super_user_security is not None) and \
-                        (export_policy_rule_exists['super-user-security'] != self.super_user_security):
+                            (export_policy_rule_exists['super-user-security'] != self.super_user_security):
                         export_rule_superuser_changed = True
                         changed = True
                     if self.client_match is not None and \
-                        (export_policy_rule_exists['client-match'] != self.client_match):
+                            (export_policy_rule_exists['client-match'] != self.client_match):
                         export_rule_clientmatch_changed = True
                         changed = True
-            else: # create
+            else:  # create
                 changed = True
         if changed:
             if self.module.check_mode:
@@ -502,6 +522,7 @@ def main():
     ''' Create object and call apply '''
     rule_obj = NetAppontapExportRule()
     rule_obj.apply()
+
 
 if __name__ == '__main__':
     main()

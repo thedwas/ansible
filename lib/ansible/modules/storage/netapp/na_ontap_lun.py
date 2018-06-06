@@ -18,8 +18,8 @@ module: na_ontap_lun
 
 short_description: Manage  NetApp Ontap luns
 extends_documentation_fragment:
-    - netapp.ontap
-version_added: '2.3'
+    - netapp.na_ontap
+version_added: '2.6'
 author: Sumit Kumar (sumit4@netapp.com), Suhas Bangalore Shekar (bsuhas@netapp.com)
 
 description:
@@ -30,7 +30,6 @@ options:
   state:
     description:
     - Whether the specified lun should exist or not.
-    required: false
     choices: ['present', 'absent']
     default: present
 
@@ -43,7 +42,7 @@ options:
     description:
     - The name of the FlexVol the lun should exist on.
     required: true
-    
+
   size:
     description:
     - The size of the lun in C(size_unit).
@@ -57,13 +56,16 @@ options:
 
   force_resize:
     description:
-    - Forcibly reduce the size. This is required for reducing the size of the LUN to avoid accidentally reducing the LUN size.
+    - Forcibly reduce the size. This is required for reducing the size of the LUN to avoid accidentally
+    - reducing the LUN size.
+    type: bool
     default: false
 
   force_remove:
     description:
     - If "true", override checks that prevent a LUN from being destroyed if it is online and mapped.
     - If "false", destroying an online and mapped LUN will fail.
+    type: bool
     default: false
 
   force_remove_fenced:
@@ -71,6 +73,7 @@ options:
     - If "true", override checks that prevent a LUN from being destroyed while it is fenced.
     - If "false", attempting to destroy a fenced LUN will fail.
     - The default if not specified is "false". This field is available in Data ONTAP 8.2 and later.
+    type: bool
     default: false
 
   vserver:
@@ -88,6 +91,7 @@ options:
     required: false
     description:
     - This can be set to "false" which will create a LUN without any space being reserved.
+    type: bool
     default: True
 
 '''
@@ -124,6 +128,7 @@ EXAMPLES = """
 RETURN = """
 
 """
+
 import traceback
 
 from ansible.module_utils.basic import AnsibleModule
@@ -150,7 +155,7 @@ class NetAppOntapLUN(object):
             yb=1024 ** 8
         )
 
-        self.argument_spec = netapp_utils.ontap_sf_host_argument_spec()
+        self.argument_spec = netapp_utils.na_ontap_host_argument_spec()
         self.argument_spec.update(dict(
             state=dict(required=False, choices=['present', 'absent'], default='present'),
             name=dict(required=True, type='str'),
@@ -161,7 +166,7 @@ class NetAppOntapLUN(object):
             force_resize=dict(default=False, type='bool'),
             force_remove=dict(default=False, type='bool'),
             force_remove_fenced=dict(default=False, type='bool'),
-            flexvol_name=dict(default=True, type='str'),
+            flexvol_name=dict(required=True, type='str'),
             vserver=dict(required=True, type='str'),
             ostype=dict(required=False, type='str', default='image'),
             space_reserve=dict(required=False, type='bool', default=True),
@@ -175,7 +180,7 @@ class NetAppOntapLUN(object):
             supports_check_mode=True
         )
 
-        parameters= self.module.params
+        parameters = self.module.params
 
         # set up state variables
         self.state = parameters['state']
@@ -196,7 +201,7 @@ class NetAppOntapLUN(object):
         if HAS_NETAPP_LIB is False:
             self.module.fail_json(msg="the python NetApp-Lib module is required")
         else:
-            self.server = netapp_utils.setup_ontap_zapi(module=self.module, vserver=self.vserver)
+            self.server = netapp_utils.setup_na_ontap_zapi(module=self.module, vserver=self.vserver)
 
     def get_lun(self):
         """

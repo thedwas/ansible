@@ -1,14 +1,13 @@
-'''create SNMP module to add/delete/modify SNMP user'''
 #!/usr/bin/python
+"""
+create SNMP module to add/delete/modify SNMP user
+"""
 
 # (c) 2018, NetApp, Inc
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
-from ansible.module_utils.basic import AnsibleModule
-from ansible.module_utils._text import to_native
-import ansible.module_utils.netapp as netapp_utils
 
 ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['preview'],
@@ -17,27 +16,27 @@ ANSIBLE_METADATA = {'metadata_version': '1.1',
 
 DOCUMENTATION = '''
 author: "Archana Ganesan (garchana@netapp.com), Suhas Bangalore Shekar (bsuhas@netapp.com)"
-description: 
+description:
   - "Create/Delete SNMP community"
-extends_documentation_fragment: 
-  - netapp.ontap
+extends_documentation_fragment:
+  - netapp.na_ontap
 module: na_ontap_snmp
-options: 
-  access_control: 
-    description: 
+options:
+  access_control:
+    description:
       - "Access control for the community. The only supported value is 'ro' (read-only)"
     required: true
-  community_name: 
-    description: 
+  community_name:
+    description:
       - "The name of the SNMP community to manage."
     required: true
-  state: 
-    choices: ['present', 'absent'] 
-    description: 
+  state:
+    choices: ['present', 'absent']
+    description:
       - "Whether the specified SNMP community should exist or not."
     default: 'present'
 short_description: "Manage NetApp SNMP community"
-version_added: "1.0"
+version_added: "2.6"
 '''
 
 EXAMPLES = """
@@ -61,6 +60,9 @@ EXAMPLES = """
 
 RETURN = """
 """
+from ansible.module_utils.basic import AnsibleModule
+from ansible.module_utils._text import to_native
+import ansible.module_utils.netapp as netapp_utils
 
 HAS_NETAPP_LIB = netapp_utils.has_netapp_lib()
 
@@ -70,7 +72,7 @@ class NetAppONTAPSnmp(object):
 
     def __init__(self):
 
-        self.argument_spec = netapp_utils.ontap_sf_host_argument_spec()
+        self.argument_spec = netapp_utils.na_ontap_host_argument_spec()
         self.argument_spec.update(dict(
             state=dict(required=False, type='str', choices=['present', 'absent'], default='present'),
             community_name=dict(required=True, type='str'),
@@ -91,7 +93,7 @@ class NetAppONTAPSnmp(object):
         if HAS_NETAPP_LIB is False:
             self.module.fail_json(msg="the python NetApp-Lib module is required")
         else:
-            self.server = netapp_utils.setup_ontap_zapi(module=self.module)
+            self.server = netapp_utils.setup_na_ontap_zapi(module=self.module)
 
     def invoke_snmp_community(self, zapi):
         """
@@ -102,9 +104,8 @@ class NetAppONTAPSnmp(object):
             zapi, **{'community': self.community_name,
                      'access-control': self.access_control})
         try:
-            result = self.server.invoke_successfully(snmp_community,
-                                            enable_tunneling=True)
-        except netapp_utils.zapi.NaApiError as error:  # return False for duplicate entry
+            self.server.invoke_successfully(snmp_community, enable_tunneling=True)
+        except netapp_utils.zapi.NaApiError:  # return False for duplicate entry
             return False
         return True
 
@@ -129,12 +130,12 @@ class NetAppONTAPSnmp(object):
         """
         changed = False
         results = netapp_utils.get_cserver(self.server)
-        cserver = netapp_utils.setup_ontap_zapi(module=self.module, vserver=results)
+        cserver = netapp_utils.setup_na_ontap_zapi(module=self.module, vserver=results)
         netapp_utils.ems_log_event("na_ontap_snmp", cserver)
-        if self.state == 'present': # add
+        if self.state == 'present':  # add
             if self.add_snmp_community():
                 changed = True
-        elif self.state == 'absent': # delete
+        elif self.state == 'absent':  # delete
             if self.delete_snmp_community():
                 changed = True
 
@@ -145,6 +146,7 @@ def main():
     '''Execute action'''
     community_obj = NetAppONTAPSnmp()
     community_obj.apply()
+
 
 if __name__ == '__main__':
     main()

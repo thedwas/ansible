@@ -11,43 +11,47 @@ ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['preview'],
                     'supported_by': 'community'}
 
-DOCUMENTATION = '''
+DOCUMENTATION = """
 module: na_ontap_net_ifgrp
 short_description: Create, modify, destroy the network interface group
 extends_documentation_fragment:
-    - netapp.ontap
-version_added: '1.0'
-author: Chris Archibald (carchi@netapp.com), Kevin Hutton (khutton@netapp.com), Suhas Bangalore Shekar (bsuhas@netapp.com)
+    - netapp.na_ontap
+version_added: '2.6'
+author:
+- Chris Archibald (carchi@netapp.com), Kevin Hutton (khutton@netapp.com), Suhas Bangalore Shekar (bsuhas@netapp.com)
 description:
 - Create, modify, destroy the network interface group
 options:
   state:
     description:
     - Whether the specified volume should exist or not.
-    required: false
     choices: ['present', 'absent']
     default: present
+
   distribution_function:
     description:
     - Specifies the traffic distribution function for the ifgrp.
-    required: false
+    choices: ['mac', 'ip', 'sequential', 'port']
+
   name:
     description:
     - Specifies the interface group name.
     required: true
+
   mode:
     description:
     - Specifies the link policy for the ifgrp.
-    required: false
+
   node:
     description:
     - Specifies the name of node.
     required: true
+
   port:
     description:
     - Adds the specified port.
-    required: false
-'''
+
+"""
 
 EXAMPLES = """
     - name: create ifgrp
@@ -71,6 +75,10 @@ EXAMPLES = """
         node={{ Vsim node name }}
 """
 
+RETURN = """
+
+"""
+
 import traceback
 
 from ansible.module_utils.basic import AnsibleModule
@@ -78,6 +86,7 @@ from ansible.module_utils._text import to_native
 import ansible.module_utils.netapp as netapp_utils
 
 HAS_NETAPP_LIB = netapp_utils.has_netapp_lib()
+
 
 class NetAppOntapIfGrp(object):
     """
@@ -87,7 +96,7 @@ class NetAppOntapIfGrp(object):
         """
             Initialize the Ontap IfGrp class
         """
-        self.argument_spec = netapp_utils.ontap_sf_host_argument_spec()
+        self.argument_spec = netapp_utils.na_ontap_host_argument_spec()
         self.argument_spec.update(dict(
             state=dict(required=False, choices=['present', 'absent'], default='present'),
             distribution_function=dict(required=False, type='str', choices=['mac', 'ip', 'sequential', 'port']),
@@ -118,7 +127,7 @@ class NetAppOntapIfGrp(object):
         if HAS_NETAPP_LIB is False:
             self.module.fail_json(msg="the python NetApp-Lib module is required")
         else:
-            self.server = netapp_utils.setup_ontap_zapi(module=self.module)
+            self.server = netapp_utils.setup_na_ontap_zapi(module=self.module)
         return
 
     def get_if_grp(self):
@@ -144,8 +153,7 @@ class NetAppOntapIfGrp(object):
         if result.get_child_by_name('num-records') and \
                 int(result.get_child_content('num-records')) >= 1:
 
-            if_group_attributes = result.get_child_by_name('attributes-list').\
-                                get_child_by_name('net-port-info')
+            if_group_attributes = result.get_child_by_name('attributes-list').get_child_by_name('net-port-info')
             distribution_function = if_group_attributes.get_child_content('ifgrp-distribution-function')
             name = if_group_attributes.get_child_content('port')
             mode = if_group_attributes.get_child_content('ifgrp-mode')
@@ -179,8 +187,7 @@ class NetAppOntapIfGrp(object):
         return_value = None
 
         if result.get_child_by_name('attributes'):
-            if_group_attributes = result.get_child_by_name('attributes').\
-                                get_child_by_name('net-ifgrp-info')
+            if_group_attributes = result.get_child_by_name('attributes').get_child_by_name('net-ifgrp-info')
             name = if_group_attributes.get_child_content('ifgrp-name')
             mode = if_group_attributes.get_child_content('mode')
             port_list = []
@@ -195,8 +202,6 @@ class NetAppOntapIfGrp(object):
                 'node': node,
                 'ports': port_list
             }
-
-
         return return_value
 
     def create_if_grp(self):
@@ -238,7 +243,8 @@ class NetAppOntapIfGrp(object):
         try:
             self.server.invoke_successfully(route_obj, True)
         except netapp_utils.zapi.NaApiError as error:
-            self.module.fail_json(msg='Error adding port %s to if_group %s: %s' % (self.port, self.name, to_native(error)),
+            self.module.fail_json(msg='Error adding port %s to if_group %s: %s' %
+                                      (self.port, self.name, to_native(error)),
                                   exception=traceback.format_exc())
 
     def remove_port_to_if_grp(self):
@@ -252,7 +258,8 @@ class NetAppOntapIfGrp(object):
         try:
             self.server.invoke_successfully(route_obj, True)
         except netapp_utils.zapi.NaApiError as error:
-            self.module.fail_json(msg='Error removing port %s to if_group %s: %s' % (self.port, self.name, to_native(error)),
+            self.module.fail_json(msg='Error removing port %s to if_group %s: %s' %
+                                      (self.port, self.name, to_native(error)),
                                   exception=traceback.format_exc())
 
     def apply(self):
@@ -261,7 +268,7 @@ class NetAppOntapIfGrp(object):
         add_ports_exists = True
         remove_ports_exists = False
         results = netapp_utils.get_cserver(self.server)
-        cserver = netapp_utils.setup_ontap_zapi(module=self.module, vserver=results)
+        cserver = netapp_utils.setup_na_ontap_zapi(module=self.module, vserver=results)
         netapp_utils.ems_log_event("na_ontap_net_ifgrp", cserver)
         if_group_detail = self.get_if_grp()
         if if_group_detail:
@@ -292,7 +299,6 @@ class NetAppOntapIfGrp(object):
                 if self.state == 'present':
                     if not ifgroup_exists:
                         self.create_if_grp()
-                        if_group_detail = self.get_if_grp()
                         if self.port:
                             self.add_port_to_if_grp()
                     else:
@@ -305,12 +311,14 @@ class NetAppOntapIfGrp(object):
 
         self.module.exit_json(changed=changed)
 
+
 def main():
     """
     Creates the NetApp Ontap Net Route object and runs the correct play task
     """
     obj = NetAppOntapIfGrp()
     obj.apply()
+
 
 if __name__ == '__main__':
     main()

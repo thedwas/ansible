@@ -1,7 +1,8 @@
 #!/usr/bin/python
 
 # (c) 2018, NetApp, Inc
-# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+# GNU General Public License v3.0+
+# (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
@@ -15,39 +16,48 @@ DOCUMENTATION = '''
 module: na_ontap_service_processor_network
 short_description: Manage NetApp Ontap service processor network
 extends_documentation_fragment:
-    - netapp.ontap
-version_added: '1.0'
-author: Chris Archibald (carchi@netapp.com), Kevin Hutton (khutton@netapp.com)
+    - netapp.na_ontap
+version_added: '2.6'
+author:
+- Chris Archibald (carchi@netapp.com), Kevin Hutton (khutton@netapp.com)
 description:
 - Modify a Ontap service processor network
 options:
+  state:
+    description:
+    - Whether the specified service processor network should exist or not.
+    choices: ['present']
+    default: present
   address_type:
     description:
-    - Specify address class (ipV4 or ipV6).
+    - Specify address class.
     required: true
+    choices: ['ipv4', 'ipv6']
   is_enabled:
     description:
-    - Specify whether to enable or disable the service processor network (true or false)
+    - Specify whether to enable or disable the service processor network.
     required: true
+    choices: ['true', 'false']
   node:
     description:
     - The node where the the service processor network should be enabled
     required: true
   dhcp:
     description:
-    - Specify dhcp type (v4 or none)
+    - Specify dhcp type.
+    choices: ['v4', 'none']
   gateway_ip_address:
     description:
-    - Specify the gateway ip
+    - Specify the gateway ip.
   ip_address:
     description:
-    - Specify the service processor ip address
+    - Specify the service processor ip address.
   netmask:
     description:
-    - Specify the service processor netmask
+    - Specify the service processor netmask.
   prefix_length:
     description:
-    - Specify the service processor prefix_length
+    - Specify the service processor prefix_length.
 '''
 
 EXAMPLES = """
@@ -64,6 +74,8 @@ EXAMPLES = """
         hostname={{ netapp_hostname }}
 """
 
+RETURN = """
+"""
 import traceback
 
 from ansible.module_utils.basic import AnsibleModule
@@ -72,15 +84,17 @@ import ansible.module_utils.netapp as netapp_utils
 
 HAS_NETAPP_LIB = netapp_utils.has_netapp_lib()
 
+
 class NetAppOntapServiceProcessorNetwork(object):
     """
         Modify a Service Processor Network
     """
+
     def __init__(self):
         """
             Initialize the NetAppOntapServiceProcessorNetwork class
         """
-        self.argument_spec = netapp_utils.ontap_sf_host_argument_spec()
+        self.argument_spec = netapp_utils.na_ontap_host_argument_spec()
         self.argument_spec.update(dict(
             state=dict(required=False, choices=['present'], default='present'),
             address_type=dict(required=True, choices=['ipv4', 'ipv6']),
@@ -113,9 +127,11 @@ class NetAppOntapServiceProcessorNetwork(object):
         self.prefix_length = parameters['prefix_length']
 
         if HAS_NETAPP_LIB is False:
-            self.module.fail_json(msg="the python NetApp-Lib module is required")
+            self.module.fail_json(
+                msg="the python NetApp-Lib module is required")
         else:
-            self.server = netapp_utils.setup_ontap_zapi(module=self.module, vserver=None)
+            self.server = netapp_utils.setup_na_ontap_zapi(
+                module=self.module, vserver=None)
         return
 
     def get_service_processor_network(self):
@@ -126,8 +142,10 @@ class NetAppOntapServiceProcessorNetwork(object):
         :return: Details about service processor network. None if not found.
         :rtype: dict
         """
-        spn_get_iter = netapp_utils.zapi.NaElement('service-processor-network-get-iter')
-        spn_info = netapp_utils.zapi.NaElement('service-processor-network-info')
+        spn_get_iter = netapp_utils.zapi.NaElement(
+            'service-processor-network-get-iter')
+        spn_info = netapp_utils.zapi.NaElement(
+            'service-processor-network-info')
         spn_info.add_new_child('node', self.node)
         spn_info.add_new_child('address-type', self.address_type)
         spn_info.add_new_child('is-enabled', self.is_enabled)
@@ -140,15 +158,18 @@ class NetAppOntapServiceProcessorNetwork(object):
         if result.get_child_by_name('num-records') and \
                 int(result.get_child_content('num-records')) >= 1:
             attributes_list = result.get_child_by_name('attributes-list').\
-                                get_child_by_name('service-processor-network-info')
+                get_child_by_name('service-processor-network-info')
             node_value = attributes_list.get_child_content('node')
-            address_type_value = attributes_list.get_child_content('address-type')
+            address_type_value = attributes_list.get_child_content(
+                'address-type')
             dhcp_value = attributes_list.get_child_content('dhcp')
-            gateway_ip_address_value = attributes_list.get_child_content('gateway-ip-address')
+            gateway_ip_address_value = attributes_list.get_child_content(
+                'gateway-ip-address')
             ip_address_value = attributes_list.get_child_content('ip-address')
             is_enabled_value = attributes_list.get_child_content('is-enabled')
             netmask_value = attributes_list.get_child_content('netmask')
-            prefix_length_value = attributes_list.get_child_content('prefix-length')
+            prefix_length_value = attributes_list.get_child_content(
+                'prefix-length')
             sp_network_details = {
                 'node_value': node_value,
                 'address_type_value': address_type_value,
@@ -165,15 +186,17 @@ class NetAppOntapServiceProcessorNetwork(object):
         """
         Modify a service processor network
         """
-        service_obj = netapp_utils.zapi.NaElement('service-processor-network-modify')
+        service_obj = netapp_utils.zapi.NaElement(
+            'service-processor-network-modify')
         service_obj.add_new_child("node", self.node)
         service_obj.add_new_child("address-type", self.address_type)
-        service_obj.add_new_child("is-enabled", self.is_enabled)    
-        
+        service_obj.add_new_child("is-enabled", self.is_enabled)
+
         if self.dhcp:
             service_obj.add_new_child("dhcp", self.dhcp)
         if self.gateway_ip_address:
-            service_obj.add_new_child("gateway-ip-address", self.gateway_ip_address)
+            service_obj.add_new_child(
+                "gateway-ip-address", self.gateway_ip_address)
         if self.ip_address:
             service_obj.add_new_child("ip-address", self.ip_address)
         if self.netmask:
@@ -183,10 +206,11 @@ class NetAppOntapServiceProcessorNetwork(object):
 
         try:
             result = self.server.invoke_successfully(service_obj,
-                                            enable_tunneling=True)
+                                                     enable_tunneling=True)
         except netapp_utils.zapi.NaApiError as error:
-            self.module.fail_json(msg='Error modifying service processor network: %s' %
-                                  (to_native(error)),
+            self.module.fail_json(msg='Error modifying \
+                                  service processor network: %s'
+                                  % (to_native(error)),
                                   exception=traceback.format_exc())
 
     def apply(self):
@@ -195,18 +219,25 @@ class NetAppOntapServiceProcessorNetwork(object):
         """
         changed = False
         results = netapp_utils.get_cserver(self.server)
-        cserver = netapp_utils.setup_ontap_zapi(module=self.module, vserver=results)
-        netapp_utils.ems_log_event("na_ontap_service_processor_network", cserver)
+        cserver = netapp_utils.setup_ontap_zapi(
+            module=self.module, vserver=results)
+        netapp_utils.ems_log_event(
+            "na_ontap_service_processor_network", cserver)
         spn_details = self.get_service_processor_network()
         spn_exists = False
         if spn_details:
             spn_exists = True
-            if self.state == 'present': # modify
-                if (self.dhcp and self.dhcp != spn_details['dhcp_value']) or \
-                   (self.gateway_ip_address and self.gateway_ip_address != spn_details['gateway_ip_address_value']) or \
-                   (self.ip_address and self.ip_address != spn_details['ip_address_value']) or \
-                   (self.netmask and self.netmask != spn_details['netmask_value']) or \
-                   (self.prefix_length and str(self.prefix_length) != spn_details['prefix_length_value']):
+            if self.state == 'present':  # modify
+                if (self.dhcp and
+                    self.dhcp != spn_details['dhcp_value']) or \
+                   (self.gateway_ip_address and
+                    self.gateway_ip_address != spn_details['gateway_ip_address_value']) or \
+                   (self.ip_address and
+                    self.ip_address != spn_details['ip_address_value']) or \
+                   (self.netmask and
+                    self.netmask != spn_details['netmask_value']) or \
+                   (self.prefix_length and str(self.prefix_length)
+                        != spn_details['prefix_length_value']):
                     changed = True
         else:
             pass
@@ -214,10 +245,11 @@ class NetAppOntapServiceProcessorNetwork(object):
             if self.module.check_mode:
                 pass
             else:
-                if self.state == 'present': # execute modify
+                if self.state == 'present':  # execute modify
                     if spn_exists:
                         self.modify_service_processor_network()
         self.module.exit_json(changed=changed)
+
 
 def main():
     """
@@ -226,6 +258,7 @@ def main():
 
     obj = NetAppOntapServiceProcessorNetwork()
     obj.apply()
+
 
 if __name__ == '__main__':
     main()

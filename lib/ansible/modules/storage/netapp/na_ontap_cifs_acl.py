@@ -1,15 +1,10 @@
-'''Module to add/delete/modify cifs-share-access-control'''
 #!/usr/bin/python
 
 # (c) 2018, NetApp, Inc
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
-
-import traceback
-from ansible.module_utils.basic import AnsibleModule
-from ansible.module_utils._text import to_native
-import ansible.module_utils.netapp as netapp_utils
 
 ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['preview'],
@@ -18,30 +13,24 @@ ANSIBLE_METADATA = {'metadata_version': '1.1',
 
 DOCUMENTATION = '''
 author: "Archana Ganesan (garchana@netapp.com), Suhas Bangalore Shekar (bsuhas@netapp.com)"
-description: 
+description:
   - "Create or destroy or modify cifs-share-access-controls on ONTAP"
-extends_documentation_fragment: 
-  - netapp.ontap
+extends_documentation_fragment:
+  - netapp.na_ontap
 module: na_ontap_cifs_acl
-options: 
-  permission: 
+options:
+  permission:
     choices: ['no_access', 'read', 'change', 'full_control']
-    description: 
-      - 
-        ? "The access rights that the user or group has on the defined CIFS share. Possible values"
-        : ~
-        change: "Change,"
-        full_control: "Full Control,"
-        no_access: "No access,"
-        read: "Read,"
+    description:
+      -"The access rights that the user or group has on the defined CIFS share."
     required: false
-  share_name: 
-    description: 
+  share_name:
+    description:
       - "The name of the cifs-share-access-control to manage."
     required: true
-  state: 
+  state:
     choices: ['present', 'absent']
-    description: 
+    description:
       - "Whether the specified CIFS share acl should exist or not."
     required: false
     default: present
@@ -49,13 +38,12 @@ options:
     description:
     - Name of the vserver to use.
     required: true
-    default: None
-  user_or_group: 
-    description: 
+  user_or_group:
+    description:
       - "The user or group name for which the permissions are listed."
     required: true
 short_description: "Manage NetApp cifs-share-access-control"
-version_added: "1.0"
+version_added: "2.6"
 
 '''
 
@@ -82,6 +70,12 @@ EXAMPLES = """
 RETURN = """
 """
 
+
+import traceback
+from ansible.module_utils.basic import AnsibleModule
+from ansible.module_utils._text import to_native
+import ansible.module_utils.netapp as netapp_utils
+
 HAS_NETAPP_LIB = netapp_utils.has_netapp_lib()
 
 
@@ -91,14 +85,13 @@ class NetAppONTAPCifsAcl(object):
     """
 
     def __init__(self):
-        self.argument_spec = netapp_utils.ontap_sf_host_argument_spec()
+        self.argument_spec = netapp_utils.na_ontap_host_argument_spec()
         self.argument_spec.update(dict(
             state=dict(required=False, type='str', choices=['present', 'absent'], default='present'),
-            vserver=dict(required=True, type='str', default=None),
+            vserver=dict(required=True, type='str'),
             share_name=dict(required=True, type='str'),
             user_or_group=dict(required=True, type='str'),
-            permission=dict(required=False, type='str', choices=['no_access', 'read',\
-                                        'change', 'full_control'])
+            permission=dict(required=False, type='str', choices=['no_access', 'read', 'change', 'full_control'])
         ))
         self.module = AnsibleModule(
             argument_spec=self.argument_spec,
@@ -118,7 +111,7 @@ class NetAppONTAPCifsAcl(object):
         if HAS_NETAPP_LIB is False:
             self.module.fail_json(msg="the python NetApp-Lib module is required")
         else:
-            self.server = netapp_utils.setup_ontap_zapi(module=self.module, vserver=self.vserver)
+            self.server = netapp_utils.setup_na_ontap_zapi(module=self.module, vserver=self.vserver)
 
     def get_cifs_acl(self):
         """
@@ -141,8 +134,7 @@ class NetAppONTAPCifsAcl(object):
         if result.get_child_by_name('num-records') and \
                 int(result.get_child_content('num-records')) == 1:
 
-            cifs_acl = result.get_child_by_name('attributes-list').\
-                                   get_child_by_name('cifs-share-access-control')
+            cifs_acl = result.get_child_by_name('attributes-list').get_child_by_name('cifs-share-access-control')
             return_value = {
                 'share': cifs_acl.get_child_content('share'),
                 'user-or-group': cifs_acl.get_child_content('user-or-group'),
@@ -164,7 +156,7 @@ class NetAppONTAPCifsAcl(object):
                                             enable_tunneling=True)
         except netapp_utils.zapi.NaApiError as error:
 
-            self.module.fail_json(msg='Error creating cifs-share-access-control %s: %s'\
+            self.module.fail_json(msg='Error creating cifs-share-access-control %s: %s'
                                   % (self.share_name, to_native(error)),
                                   exception=traceback.format_exc())
 
@@ -179,7 +171,7 @@ class NetAppONTAPCifsAcl(object):
             self.server.invoke_successfully(cifs_acl_delete,
                                             enable_tunneling=True)
         except netapp_utils.zapi.NaApiError as error:
-            self.module.fail_json(msg='Error deleting cifs-share-access-control %s: %s'\
+            self.module.fail_json(msg='Error deleting cifs-share-access-control %s: %s'
                                   % (self.share_name, to_native(error)),
                                   exception=traceback.format_exc())
 
@@ -200,39 +192,45 @@ class NetAppONTAPCifsAcl(object):
                                   exception=traceback.format_exc())
 
     def apply(self):
-        '''Apply action to cifs-share-access-control'''
+        """
+        Apply action to cifs-share-access-control
+        """
         changed = False
         cifs_acl_exists = False
         netapp_utils.ems_log_event("na_ontap_cifs_acl", self.server)
         cifs_acl_details = self.get_cifs_acl()
         if cifs_acl_details:
             cifs_acl_exists = True
-            if self.state == 'absent': # delete
+            if self.state == 'absent':  # delete
                 changed = True
             elif self.state == 'present':
-                if cifs_acl_details['permission'] != self.permission: # rename
+                if cifs_acl_details['permission'] != self.permission:  # rename
                     changed = True
         else:
-            if self.state == 'present': # create
+            if self.state == 'present':  # create
                 changed = True
         if changed:
             if self.module.check_mode:
                 pass
             else:
-                if self.state == 'present': # execute create
+                if self.state == 'present':  # execute create
                     if not cifs_acl_exists:
                         self.create_cifs_acl()
-                    else: # execute modify
+                    else:  # execute modify
                         self.modify_cifs_acl_permission()
-                elif self.state == 'absent': # execute delete
+                elif self.state == 'absent':  # execute delete
                     self.delete_cifs_acl()
 
         self.module.exit_json(changed=changed)
 
+
 def main():
-    '''Execute action from playbook'''
+    """
+    Execute action from playbook
+    """
     cifs_acl = NetAppONTAPCifsAcl()
     cifs_acl.apply()
+
 
 if __name__ == '__main__':
     main()

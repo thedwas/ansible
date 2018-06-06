@@ -1,7 +1,8 @@
 #!/usr/bin/python
 
 # (c) 2018, NetApp, Inc
-# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+# GNU General Public License v3.0+
+# (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
@@ -18,8 +19,8 @@ module: na_ontap_svm
 
 short_description: Manage NetApp Ontap svm
 extends_documentation_fragment:
-    - netapp.ontap
-version_added: '2.3'
+    - netapp.na_ontap
+version_added: '2.6'
 author: Sumit Kumar (sumit4@netapp.com), Archana Ganesan (garchana@netapp.com)
 
 description:
@@ -55,20 +56,30 @@ options:
   root_volume_security_style:
     description:
     -   Security Style of the root volume.
-    -   When specified as part of the vserver-create, this field represents the security style for the Vserver root volume.
-    -   When specified as part of vserver-get-iter call, this will return the list of matching Vservers.
+    -   When specified as part of the vserver-create,
+        this field represents the security style for the Vserver root volume.
+    -   When specified as part of vserver-get-iter call,
+        this will return the list of matching Vservers.
     -   Possible values are 'unix', 'ntfs', 'mixed'.
-    -   The 'unified' security style, which applies only to Infinite Volumes, cannot be applied to a Vserver's root volume.
-    -   Valid options are "unix" for NFS, "ntfs" for CIFS, "mixed" for Mixed, "unified" for Unified.
+    -   The 'unified' security style, which applies only to Infinite Volumes,
+        cannot be applied to a Vserver's root volume.
+    -   Valid options are "unix" for NFS, "ntfs" for CIFS,
+        "mixed" for Mixed, "unified" for Unified.
     -   Required when C(state=present)
     choices: ['unix', 'ntfs', 'mixed', 'unified']
 
   allowed_protocols:
     description:
-    - Allowed Protocols. 
-    - When specified as part of a vserver-create, this field represent the list of protocols allowed on the Vserver.
-    - When part of vserver-get-iter call, this will return the list of Vservers which have any of the protocols specified as part of the allowed-protocols. 
-    - When part of vserver-modify, this field should include the existing list along with new protocol list to be added to prevent data disruptions.
+    - Allowed Protocols.
+    - When specified as part of a vserver-create,
+      this field represent the list of protocols allowed on the Vserver.
+    - When part of vserver-get-iter call,
+      this will return the list of Vservers
+      which have any of the protocols specified
+      as part of the allowed-protocols.
+    - When part of vserver-modify,
+      this field should include the existing list
+      along with new protocol list to be added to prevent data disruptions.
     - Possible values
     - nfs   NFS protocol,
     - cifs   CIFS protocol,
@@ -76,14 +87,18 @@ options:
     - iscsi   iSCSI protocol,
     - ndmp   NDMP protocol,
     - http   HTTP protocol,
-    - nvme   NVMe protocol 
+    - nvme   NVMe protocol
 
   aggr_list:
     description:
-    - List of aggregates assigned for volume operations. 
+    - List of aggregates assigned for volume operations.
     - These aggregates could be shared for use with other Vservers.
-    - When specified as part of a vserver-create, this field represents the list of aggregates that are assigned to the Vserver for volume operations.
-    - When part of vserver-get-iter call, this will return the list of Vservers which have any of the aggregates specified as part of the aggr-list.
+    - When specified as part of a vserver-create,
+      this field represents the list of aggregates
+      that are assigned to the Vserver for volume operations.
+    - When part of vserver-get-iter call,
+      this will return the list of Vservers
+      which have any of the aggregates specified as part of the aggr-list.
 
 '''
 
@@ -103,14 +118,12 @@ EXAMPLES = """
 """
 
 RETURN = """
-
 """
 import traceback
 
+import ansible.module_utils.netapp as netapp_utils
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils._text import to_native
-import ansible.module_utils.netapp as netapp_utils
-
 
 HAS_NETAPP_LIB = netapp_utils.has_netapp_lib()
 
@@ -118,9 +131,10 @@ HAS_NETAPP_LIB = netapp_utils.has_netapp_lib()
 class NetAppOntapSVM(object):
 
     def __init__(self):
-        self.argument_spec = netapp_utils.ontap_sf_host_argument_spec()
+        self.argument_spec = netapp_utils.na_ontap_host_argument_spec()
         self.argument_spec.update(dict(
-            state=dict(required=False, choices=['present', 'absent'], default='present'),
+            state=dict(required=False, choices=[
+                       'present', 'absent'], default='present'),
             name=dict(required=True, type='str'),
             new_name=dict(required=False, type='str'),
             root_volume=dict(type='str'),
@@ -152,9 +166,10 @@ class NetAppOntapSVM(object):
         self.aggr_list = p['aggr_list']
 
         if HAS_NETAPP_LIB is False:
-            self.module.fail_json(msg="the python NetApp-Lib module is required")
+            self.module.fail_json(
+                msg="the python NetApp-Lib module is required")
         else:
-            self.server = netapp_utils.setup_ontap_zapi(module=self.module)
+            self.server = netapp_utils.setup_na_ontap_zapi(module=self.module)
 
     def get_vserver(self):
         """
@@ -191,16 +206,18 @@ class NetAppOntapSVM(object):
 
             protocols = list()
             '''allowed-protocols is not empty by default'''
-            get_protocols = vserver_info.get_child_by_name('allowed-protocols').get_children()
+            get_protocols = vserver_info.get_child_by_name(
+                'allowed-protocols').get_children()
             for protocol in get_protocols:
                 protocols.append(protocol.get_content())
-            vserver_details = {'name': vserver_info.get_child_content('vserver-name'),
+            vserver_details = {'name': vserver_info.get_child_content(
+                               'vserver-name'),
                                'aggr_list': aggr_list,
                                'allowed_protocols': protocols}
         return vserver_details
 
     def create_vserver(self):
-        options ={'vserver-name': self.name, 'root-volume': self.root_volume}
+        options = {'vserver-name': self.name, 'root-volume': self.root_volume}
         if self.root_volume_aggregate is not None:
             options['root-volume-aggregate'] = self.root_volume_aggregate
         if self.root_volume_security_style is not None:
@@ -212,8 +229,10 @@ class NetAppOntapSVM(object):
             self.server.invoke_successfully(vserver_create,
                                             enable_tunneling=False)
         except netapp_utils.zapi.NaApiError as e:
-            self.module.fail_json(msg='Error provisioning SVM %s with root volume %s on aggregate %s: %s'
-                                      % (self.name, self.root_volume, self.root_volume_aggregate, to_native(e)),
+            self.module.fail_json(msg='Error provisioning SVM %s \
+                                  with root volume %s on aggregate %s: %s'
+                                  % (self.name, self.root_volume,
+                                     self.root_volume_aggregate, to_native(e)),
                                   exception=traceback.format_exc())
 
     def delete_vserver(self):
@@ -224,9 +243,11 @@ class NetAppOntapSVM(object):
             self.server.invoke_successfully(vserver_delete,
                                             enable_tunneling=False)
         except netapp_utils.zapi.NaApiError as e:
-            self.module.fail_json(msg='Error deleting SVM %s with root volume %s on aggregate %s: %s'
-                                      % (self.name, self.root_volume, self.root_volume_aggregate, to_native(e)),
-                                      exception=traceback.format_exc())
+            self.module.fail_json(msg='Error deleting SVM %s \
+                                  with root volume %s on aggregate %s: %s'
+                                  % (self.name, self.root_volume,
+                                     self.root_volume_aggregate, to_native(e)),
+                                  exception=traceback.format_exc())
 
     def rename_vserver(self):
         vserver_rename = netapp_utils.zapi.NaElement.create_node_with_children(
@@ -237,7 +258,8 @@ class NetAppOntapSVM(object):
             self.server.invoke_successfully(vserver_rename,
                                             enable_tunneling=False)
         except netapp_utils.zapi.NaApiError as e:
-            self.module.fail_json(msg='Error renaming SVM %s: %s' % (self.name, to_native(e)),
+            self.module.fail_json(msg='Error renaming SVM %s: %s'
+                                  % (self.name, to_native(e)),
                                   exception=traceback.format_exc())
 
     def modify_vserver(self, allowed_protocols, aggr_list):
@@ -245,7 +267,8 @@ class NetAppOntapSVM(object):
             'vserver-modify', **{'vserver-name': self.name})
 
         if allowed_protocols:
-            allowed_protocols = netapp_utils.zapi.NaElement('allowed-protocols')
+            allowed_protocols = netapp_utils.zapi.NaElement(
+                'allowed-protocols')
             for protocol in self.allowed_protocols:
                 allowed_protocols.add_new_child('protocol', protocol)
             vserver_modify.add_child_elem(allowed_protocols)
@@ -260,16 +283,17 @@ class NetAppOntapSVM(object):
             self.server.invoke_successfully(vserver_modify,
                                             enable_tunneling=False)
         except netapp_utils.zapi.NaApiError as e:
-            self.module.fail_json(msg='Error modifying SVM %s: %s' % (self.name, to_native(e)),
+            self.module.fail_json(msg='Error modifying SVM %s: %s'
+                                  % (self.name, to_native(e)),
                                   exception=traceback.format_exc())
-
 
     def apply(self):
         changed = False
         vserver_details = self.get_vserver()
         if vserver_details is not None:
             results = netapp_utils.get_cserver(self.server)
-            cserver = netapp_utils.setup_ontap_zapi(module=self.module, vserver=results)
+            cserver = netapp_utils.setup_ontap_zapi(
+                module=self.module, vserver=results)
             netapp_utils.ems_log_event("na_ontap_svm", cserver)
 
         rename_vserver = False
@@ -286,7 +310,7 @@ class NetAppOntapSVM(object):
                 if self.allowed_protocols is not None:
                     self.allowed_protocols.sort()
                     vserver_details['allowed_protocols'].sort()
-                    if self.allowed_protocols !=  vserver_details['allowed_protocols']:
+                    if self.allowed_protocols != vserver_details['allowed_protocols']:
                         modify_protocols = True
                         changed = True
                 if self.aggr_list is not None:
@@ -309,7 +333,8 @@ class NetAppOntapSVM(object):
                         if rename_vserver:
                             self.rename_vserver()
                         if modify_protocols or modify_aggr_list:
-                            self.modify_vserver(modify_protocols, modify_aggr_list)
+                            self.modify_vserver(
+                                modify_protocols, modify_aggr_list)
                 elif self.state == 'absent':
                     self.delete_vserver()
 
@@ -319,6 +344,7 @@ class NetAppOntapSVM(object):
 def main():
     v = NetAppOntapSVM()
     v.apply()
+
 
 if __name__ == '__main__':
     main()

@@ -12,12 +12,12 @@ ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'supported_by': 'community'}
 
 
-DOCUMENTATION = '''
+DOCUMENTATION = """
 module: na_ontap_ntp
 short_description: Create/Delete/modify_version ONTAP NTP server
 extends_documentation_fragment:
-    - netapp.ontap
-version_added: '1.0'
+    - netapp.na_ontap
+version_added: '2.6'
 author: Suhas Bangalore Shekar (bsuhas@netapp.com), Archana Ganesan (garchana@netapp.com)
 description:
 - Create or delete or modify ntp server in ONTAP
@@ -32,11 +32,12 @@ options:
     - The name of the ntp server to manage.
     required: True
   version:
-    description: 
+    description:
     - give version for ntp server
     required: False
     choices: ['auto', '3', '4']
-'''
+    default: 'auto'
+"""
 
 EXAMPLES = """
     - name: Create NTP server
@@ -62,16 +63,16 @@ from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils._text import to_native
 import ansible.module_utils.netapp as netapp_utils
 
-
 HAS_NETAPP_LIB = netapp_utils.has_netapp_lib()
 
 
 class NetAppOntapNTPServer(object):
-    ''' object initialize and class methods '''
+    """ object initialize and class methods """
     def __init__(self):
-        self.argument_spec = netapp_utils.ontap_sf_host_argument_spec()
+        self.argument_spec = netapp_utils.na_ontap_host_argument_spec()
         self.argument_spec.update(dict(
-            state=dict(required=False, choices=['present', 'absent'], default='present'),
+            state=dict(required=False, choices=[
+                       'present', 'absent'], default='present'),
             server_name=dict(required=True, type='str'),
             version=dict(required=False, type='str', default='auto',
                          choices=['auto', '3', '4']),
@@ -90,9 +91,10 @@ class NetAppOntapNTPServer(object):
         self.version = parameters['version']
 
         if HAS_NETAPP_LIB is False:
-            self.module.fail_json(msg="the python NetApp-Lib module is required")
+            self.module.fail_json(
+                msg="the python NetApp-Lib module is required")
         else:
-            self.server = netapp_utils.setup_ontap_zapi(module=self.module)
+            self.server = netapp_utils.setup_na_ontap_zapi(module=self.module)
 
     def get_ntp_server(self):
         """
@@ -117,11 +119,11 @@ class NetAppOntapNTPServer(object):
                 int(result.get_child_content('num-records')) == 1:
 
             ntp_server_name = result.get_child_by_name('attributes-list').\
-                                 get_child_by_name('ntp-server-info').\
-                                 get_child_content('server-name')
+                get_child_by_name('ntp-server-info').\
+                get_child_content('server-name')
             server_version = result.get_child_by_name('attributes-list').\
-                                 get_child_by_name('ntp-server-info').\
-                                 get_child_content('version')
+                get_child_by_name('ntp-server-info').\
+                get_child_content('version')
             return_value = {
                 'server-name': ntp_server_name,
                 'version': server_version
@@ -136,14 +138,14 @@ class NetAppOntapNTPServer(object):
         ntp_server_create = netapp_utils.zapi.NaElement.create_node_with_children(
             'ntp-server-create', **{'server-name': self.server_name,
                                     'version': self.version
-                                   })
+                                    })
 
         try:
             self.server.invoke_successfully(ntp_server_create,
                                             enable_tunneling=True)
         except netapp_utils.zapi.NaApiError as error:
-            self.module.fail_json(msg='Error creating ntp server %s: %s' \
-                                    % (self.server_name, to_native(error)),
+            self.module.fail_json(msg='Error creating ntp server %s: %s'
+                                  % (self.server_name, to_native(error)),
                                   exception=traceback.format_exc())
 
     def delete_ntp_server(self):
@@ -157,8 +159,8 @@ class NetAppOntapNTPServer(object):
             self.server.invoke_successfully(ntp_server_delete,
                                             enable_tunneling=True)
         except netapp_utils.zapi.NaApiError as error:
-            self.module.fail_json(msg='Error deleting ntp server %s: %s' \
-                                    % (self.server_name, to_native(error)),
+            self.module.fail_json(msg='Error deleting ntp server %s: %s'
+                                  % (self.server_name, to_native(error)),
                                   exception=traceback.format_exc())
 
     def modify_version(self):
@@ -172,28 +174,30 @@ class NetAppOntapNTPServer(object):
             self.server.invoke_successfully(ntp_modify_versoin,
                                             enable_tunneling=True)
         except netapp_utils.zapi.NaApiError as error:
-            self.module.fail_json(msg='Error modifying version for ntp server %s: %s' \
+            self.module.fail_json(msg='Error modifying version for ntp server %s: %s'
                                   % (self.server_name, to_native(error)),
                                   exception=traceback.format_exc())
 
-
     def apply(self):
-        '''Apply action to ntp-server'''
+        """Apply action to ntp-server"""
+
         changed = False
         ntp_modify = False
         results = netapp_utils.get_cserver(self.server)
-        cserver = netapp_utils.setup_ontap_zapi(module=self.module, vserver=results)
+        cserver = netapp_utils.setup_na_ontap_zapi(
+            module=self.module, vserver=results)
         netapp_utils.ems_log_event("na_ontap_ntp", cserver)
         ntp_server_details = self.get_ntp_server()
         if ntp_server_details is not None:
-            if self.state == 'absent': # delete
+            if self.state == 'absent':  # delete
                 changed = True
             elif self.state == 'present' and self.version:
-                if self.version != ntp_server_details['version']: # modify version
+                # modify version
+                if self.version != ntp_server_details['version']:
                     ntp_modify = True
                     changed = True
         else:
-            if self.state == 'present': # create
+            if self.state == 'present':  # create
                 changed = True
 
         if changed:
@@ -212,9 +216,10 @@ class NetAppOntapNTPServer(object):
 
 
 def main():
-    ''' Create object and call apply '''
+    """ Create object and call apply """
     ntp_obj = NetAppOntapNTPServer()
     ntp_obj.apply()
+
 
 if __name__ == '__main__':
     main()

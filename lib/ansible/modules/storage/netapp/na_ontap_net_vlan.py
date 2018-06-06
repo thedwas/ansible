@@ -6,7 +6,6 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
-
 ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['preview'],
                     'supported_by': 'community'}
@@ -16,7 +15,7 @@ module: na_ontap_net_vlan
 short_description: Manage NetApp Ontap network vlan
 extends_documentation_fragment:
     - netapp.ontap
-version_added: '1.0'
+version_added: '2.6'
 author: Chris Archibald (carchi@netapp.com), Kevin Hutton (khutton@netapp.com)
 description:
 - Create or Delete a network vlan
@@ -24,15 +23,15 @@ options:
   state:
     description:
     - Whether you want to create to delete a network vlan
-    chocies: ['present', 'absent']
-    default: 'present'
+    choices: ['present', 'absent']
+    default: present
   parent_interface:
     description:
     - The interface that hosts the vlan interface.
     required: true
   vlanid:
     description:
-    - The vlan id. Range: 1..4094.
+    - The vlan id. Ranges from 1 to 4094.
     required: true
   node:
     description:
@@ -57,10 +56,15 @@ EXAMPLES = """
         hostname={{ netapp_hostname }}
 """
 
+RETURN = """
+
+"""
+
 from ansible.module_utils.basic import AnsibleModule
 import ansible.module_utils.netapp as netapp_utils
 
 HAS_NETAPP_LIB = netapp_utils.has_netapp_lib()
+
 
 class NetAppOntapVlan(object):
     """
@@ -131,7 +135,7 @@ class NetAppOntapVlan(object):
         try:
             result = self.server.invoke_successfully(vlan_obj, True)
             result.get_child_by_name("attributes").get_child_by_name("vlan-info").get_child_by_name("interface-name")
-        except:
+        except netapp_utils.zapi.NaApiError:
             return False
         return True
 
@@ -142,10 +146,10 @@ class NetAppOntapVlan(object):
         """
         vlan_info = netapp_utils.zapi.NaElement("vlan-info")
 
-        #set up the vlan_info object:
+        #  set up the vlan_info object:
         vlan_info.add_new_child("parent-interface", self.parent_interface)
         vlan_info.add_new_child("vlanid", self.vlanid)
-        #add the optional line if they exist.
+        #  add the optional line if they exist.
         if self.node:
             vlan_info.add_new_child("node", self.node)
         if self.interface_name:
@@ -166,10 +170,10 @@ class NetAppOntapVlan(object):
         netapp_utils.ems_log_event("na_ontap_net_vlan", cserver)
         existing_vlan = self.does_vlan_exits()
         if existing_vlan:
-            if self.state == 'absent': #delete
+            if self.state == 'absent':  # delete
                 changed = True
         else:
-            if self.state == 'present': #create
+            if self.state == 'present':  # create
                 changed = True
         if changed:
             if self.module.check_mode:
@@ -181,12 +185,14 @@ class NetAppOntapVlan(object):
                     self.delete_vlan()
         self.module.exit_json(changed=changed, meta=result)
 
+
 def main():
     """
     Creates the NetApp Ontap vlan object, and runs the correct play task.
     """
     v = NetAppOntapVlan()
     v.apply()
+
 
 if __name__ == '__main__':
     main()

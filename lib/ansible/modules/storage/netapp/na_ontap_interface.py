@@ -1,10 +1,13 @@
 #!/usr/bin/python
-''' this is interface module 
+""" this is interface module
 
  (c) 2018, NetApp, Inc
  # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
-'''
- 
+"""
+
+from __future__ import absolute_import, division, print_function
+__metaclass__ = type
+
 ANSIBLE_METADATA = {
     'metadata_version': '1.1',
     'status': ['preview'],
@@ -18,8 +21,8 @@ module: na_ontap_interface
 short_description: ONTAP LIF configuration
 
 extends_documentation_fragment:
-    - netapp.ontap
-version_added: '2.4'
+    - netapp.na_ontap
+version_added: '2.6'
 author: chhaya gunawat (chhayag@netapp.com)
 
 description:
@@ -29,7 +32,6 @@ options:
   state:
     description:
     - Whether the specified interface should exist or not.
-    required: false
     choices: ['present', 'absent']
     default: present
 
@@ -38,7 +40,7 @@ options:
     - Specifies the logical interface (LIF) name.
     required: true
 
-  home-node:
+  home_node:
     description:
     - Specifies the LIF's home node.
     - Required when C(state=present).
@@ -46,7 +48,7 @@ options:
   home_port:
     description:
     - Specifies the LIF's home port.
-    - Required: when C(state=present)
+    - Required when C(state=present)
 
   role:
     description:
@@ -56,7 +58,7 @@ options:
   address:
     description:
     - Specifies the LIF's IP address.
-    - Required: when C(state=present)
+    - Required when C(state=present)
 
   netmask:
     description:
@@ -68,32 +70,28 @@ options:
     - The name of the vserver to use.
     required: true
 
-  firewall-policy:
+  firewall_policy:
     description:
     - Specifies the firewall policy for the LIF.
-    required: false
 
-  failover-policy:
+  failover_policy:
     description:
     - Specifies the failover policy for the LIF.
-    required: false
 
-  administrative-status:
+  admin_status:
     description:
     - Specifies the administrative status of the LIF..
-    required: false
-  
-  is-auto-revert:
+
+  is_auto_revert:
     description:
-    - If true, data LIF will revert to its home node under certain circumstances such as startup, and load balancing migration capability is disabled automatically
-    required: false
+    - If true, data LIF will revert to its home node under certain circumstances such as startup, and load balancing
+    - migration capability is disabled automatically
 
   protocols:
     description:
     - Specifies the list of data protocols configured on the LIF. By default, the values in this element are nfs, cifs and fcache.
     - Other supported protocols are iscsi and fcp. A LIF can be configured to not support any data protocols by specifying 'none'.
     - Protocol values of none, iscsi or fcp can't be combined with any other data protocol(s).
-    required: false
 
 '''
 
@@ -106,8 +104,8 @@ EXAMPLES = '''
         home_node: laurentn-vsim1
         role: data
         protocols: nfs
-        admin_status: up 
-        failover_policy: local-only 
+        admin_status: up
+        failover_policy: local-only
         firewall_policy: mgmt
         is_auto_revert: true
         address: 10.10.10.10
@@ -128,9 +126,10 @@ EXAMPLES = '''
 
 '''
 
-RETURN = '''
-    changed: True/False 
-'''
+RETURN = """
+
+"""
+
 import traceback
 import json
 from ansible.module_utils.basic import AnsibleModule
@@ -145,16 +144,17 @@ class NetAppOntapInterface(object):
 
     def __init__(self):
 
-        self.argument_spec = netapp_utils.ontap_sf_host_argument_spec()
+        self.argument_spec = netapp_utils.na_ontap_host_argument_spec()
         self.argument_spec.update(dict(
-            state=dict(required=False, choices=['present', 'absent'], default='present'),
+            state=dict(required=False, choices=[
+                       'present', 'absent'], default='present'),
             interface_name=dict(required=True, type='str'),
             home_node=dict(required=False, type='str', default=None),
             home_port=dict(required=False, type='str'),
             role=dict(required=False, type='str'),
             address=dict(required=False, type='str'),
             netmask=dict(required=False, type='str'),
-            vserver=dict(required=True, type='str', default=None),
+            vserver=dict(required=True, type='str'),
             firewall_policy=dict(required=False, type='str', default=None),
             failover_policy=dict(required=False, type='str', default=None),
             admin_status=dict(required=False, type='str', default=None),
@@ -174,21 +174,22 @@ class NetAppOntapInterface(object):
         self.state = params['state']
         self.interface_name = params['interface_name']
         self.home_node = params['home_node']
-        self.home_port= params['home_port']
+        self.home_port = params['home_port']
         self.role = params['role']
         self.vserver = params['vserver']
         self.address = params['address']
         self.netmask = params['netmask']
         self.admin_status = params['admin_status']
         self.failover_policy = params['failover_policy']
-        self.firewall_policy = params ['firewall_policy']
+        self.firewall_policy = params['firewall_policy']
         self.is_auto_revert = params['is_auto_revert']
         self.protocols = params['protocols']
 
         if HAS_NETAPP_LIB is False:
-            self.module.fail_json(msg="the python NetApp-Lib module is required")
+            self.module.fail_json(
+                msg="the python NetApp-Lib module is required")
         else:
-            self.server = netapp_utils.setup_ontap_zapi(module=self.module)
+            self.server = netapp_utils.setup_na_ontap_zapi(module=self.module)
 
     def get_interface(self):
         """
@@ -200,8 +201,10 @@ class NetAppOntapInterface(object):
         :rtype: dict
         """
         interface_info = netapp_utils.zapi.NaElement('net-interface-get-iter')
-        interface_attributes = netapp_utils.zapi.NaElement('net-interface-info')
-        interface_attributes.add_new_child('interface-name', self.interface_name)
+        interface_attributes = netapp_utils.zapi.NaElement(
+            'net-interface-info')
+        interface_attributes.add_new_child(
+            'interface-name', self.interface_name)
         query = netapp_utils.zapi.NaElement('query')
         query.add_child_elem(interface_attributes)
         interface_info.add_child_elem(query)
@@ -226,12 +229,11 @@ class NetAppOntapInterface(object):
             }
         return return_value
 
-   
     def create_interface(self):
         ''' calling zapi to create interface '''
-        
-        
-        options ={'interface-name': self.interface_name,'vserver':self.vserver}
+
+        options = {'interface-name': self.interface_name,
+                   'vserver': self.vserver}
         if self.home_port is not None:
             options['home-port'] = self.home_port
         if self.home_node is not None:
@@ -245,8 +247,8 @@ class NetAppOntapInterface(object):
         if self.failover_policy is not None:
             options['failover-policy'] = self.failover_policy
         if self.firewall_policy is not None:
-           options['firewall-policy'] = self.firewall_policy
-        if  self.is_auto_revert is not None:
+            options['firewall-policy'] = self.firewall_policy
+        if self.is_auto_revert is not None:
             options['is-auto-revert'] = self.is_auto_revert
         if self.admin_status is not None:
             options['administrative-status'] = self.admin_status
@@ -264,7 +266,7 @@ class NetAppOntapInterface(object):
                                             enable_tunneling=True)
         except netapp_utils.zapi.NaApiError as exc:
             self.module.fail_json(msg='Error Creating interface %s: %s' %
-                (self.interface_name, to_native(exc)), exception=traceback.format_exc())
+                                  (self.interface_name, to_native(exc)), exception=traceback.format_exc())
 
     def delete_interface(self, current_status):
         ''' calling zapi to delete interface '''
@@ -274,7 +276,7 @@ class NetAppOntapInterface(object):
 
         interface_delete = netapp_utils.zapi.NaElement.create_node_with_children(
             'net-interface-delete', **{'interface-name': self.interface_name,
-                 'vserver': self.vserver})
+                                       'vserver': self.vserver})
         try:
             self.server.invoke_successfully(interface_delete,
                                             enable_tunneling=True)
@@ -285,17 +287,17 @@ class NetAppOntapInterface(object):
     def modify_interface(self):
         """
         Modify the interface.
-        """   
-        options ={'interface-name': self.interface_name, 
-                              'vserver':self.vserver
-                            }
+        """
+        options = {'interface-name': self.interface_name,
+                   'vserver': self.vserver
+                   }
         if self.admin_status is not None:
             options['administrative-status'] = self.admin_status
         if self.failover_policy is not None:
             options['failover-policy'] = self.failover_policy
         if self.firewall_policy is not None:
-           options['firewall-policy'] = self.firewall_policy
-        if  self.is_auto_revert is not None:
+            options['firewall-policy'] = self.firewall_policy
+        if self.is_auto_revert is not None:
             options['is-auto-revert'] = self.is_auto_revert
         if self.netmask is not None:
             options['netmask'] = self.netmask
@@ -311,13 +313,13 @@ class NetAppOntapInterface(object):
             self.module.fail_json(msg='Error modifying interface %s: %s' % (self.interface_name, to_native(e)),
                                   exception=traceback.format_exc())
 
-
     def apply(self):
         ''' calling all interface features '''
         changed = False
         interface_exists = False
         results = netapp_utils.get_cserver(self.server)
-        cserver = netapp_utils.setup_ontap_zapi(module=self.module, vserver=results)
+        cserver = netapp_utils.setup_na_ontap_zapi(
+            module=self.module, vserver=results)
         netapp_utils.ems_log_event("na_ontap_interface", cserver)
         interface_detail = self.get_interface()
         obj = open('workFile', 'w')
@@ -356,10 +358,10 @@ class NetAppOntapInterface(object):
         self.module.exit_json(changed=changed)
 
 
-
 def main():
     interface = NetAppOntapInterface()
     interface.apply()
+
 
 if __name__ == '__main__':
     main()

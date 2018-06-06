@@ -1,10 +1,13 @@
 #!/usr/bin/python
-''' this is cifs_server module 
+""" this is cifs_server module
 
  (c) 2018, NetApp, Inc
  # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
-'''
- 
+"""
+
+from __future__ import absolute_import, division, print_function
+__metaclass__ = type
+
 ANSIBLE_METADATA = {
     'metadata_version': '1.1',
     'status': ['preview'],
@@ -16,8 +19,8 @@ DOCUMENTATION = '''
 module: na_ontap_cifs_server
 short_description: cifs server configuration
 extends_documentation_fragment:
-    - netapp.ontap
-version_added: '2.4'
+    - netapp.na_ontap
+version_added: '2.6'
 author: chhaya gunawat (chhayag@netapp.com)
 
 description:
@@ -27,14 +30,15 @@ options:
 
   state:
     description:
-    - Whether the specified cifs_server should exist or not. Values: present/absent
-    required: false
+    - Whether the specified cifs_server should exist or not.
     default: present
+    choices: ['present', 'absent']
 
   service_state:
     description:
-    - CIFS Server Administrative Status. Values: started/stopped
+    - CIFS Server Administrative Status.
     required: true
+    choices: ['stopped', 'started']
 
   cifs_server_name:
     description:
@@ -43,29 +47,26 @@ options:
 
   admin_user_name:
     description:
-    - Specifies the LIF's home node.
-    required: false
+    - Specifies the cifs server admin username.
 
   admin_password:
     description:
-    - Specifies the role of the LIF.
-    required: false
+    - Specifies the cifs server admin password.
 
   domain:
     description:
     - The Fully Qualified Domain Name of the Windows Active Directory this CIFS server belongs to.
-    required: false
 
   workgroup:
     description:
     -  The NetBIOS name of the domain or workgroup this CIFS server belongs to.
-    required: false
+
 
   vserver:
     description:
     - The name of the vserver to use.
     required: true
-   
+
 '''
 
 EXAMPLES = '''
@@ -89,11 +90,9 @@ EXAMPLES = '''
 '''
 
 RETURN = '''
-    changed: True/False 
 '''
 
 import traceback
-
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils._text import to_native
 import ansible.module_utils.netapp as netapp_utils
@@ -101,12 +100,14 @@ import ansible.module_utils.netapp as netapp_utils
 HAS_NETAPP_LIB = netapp_utils.has_netapp_lib()
 
 
-class NetAppOntapcifs_server(object):
-    ''' object to describe  cifs_server info '''
+class NetAppOntapcifsServer(object):
+    """
+    object to describe  cifs_server info
+    """
 
     def __init__(self):
 
-        self.argument_spec = netapp_utils.ontap_sf_host_argument_spec()
+        self.argument_spec = netapp_utils.na_ontap_host_argument_spec()
         self.argument_spec.update(dict(
             state=dict(required=False, choices=['present', 'absent'], default='present'),
             service_state=dict(required=False, choices=['stopped', 'started']),
@@ -116,7 +117,7 @@ class NetAppOntapcifs_server(object):
             admin_user_name=dict(required=False, type='str'),
             admin_password=dict(required=False, type='str'),
 
-            vserver=dict(required=True, type='str', default=None),
+            vserver=dict(required=True, type='str'),
         ))
 
         self.module = AnsibleModule(
@@ -130,7 +131,7 @@ class NetAppOntapcifs_server(object):
         self.state = params['state']
         self.cifs_server_name = params['cifs_server_name']
         self.workgroup = params['workgroup']
-        self.domain= params['domain']
+        self.domain = params['domain']
         self.vserver = params['vserver']
         self.service_state = params['service_state']
         self.admin_user_name = params['admin_user_name']
@@ -139,7 +140,7 @@ class NetAppOntapcifs_server(object):
         if HAS_NETAPP_LIB is False:
             self.module.fail_json(msg="the python NetApp-Lib module is required")
         else:
-            self.server = netapp_utils.setup_ontap_zapi(module=self.module, vserver=self.vserver)
+            self.server = netapp_utils.setup_na_ontap_zapi(module=self.module, vserver=self.vserver)
 
     def get_cifs_server(self):
         """
@@ -171,11 +172,12 @@ class NetAppOntapcifs_server(object):
 
         return return_value
 
-   
     def create_cifs_server(self):
-        ''' calling zapi to create cifs_server '''
-
-        options ={'cifs-server': self.cifs_server_name, 'administrative-status': 'up' if self.service_state == 'started' else 'down'}
+        """
+        calling zapi to create cifs_server
+        """
+        options = {'cifs-server': self.cifs_server_name, 'administrative-status': 'up'
+                   if self.service_state == 'started' else 'down'}
         if self.workgroup is not None:
             options['workgroup'] = self.workgroup
         if self.domain is not None:
@@ -193,12 +195,14 @@ class NetAppOntapcifs_server(object):
                                             enable_tunneling=True)
         except netapp_utils.zapi.NaApiError as exc:
             self.module.fail_json(msg='Error Creating cifs_server %s: %s' %
-                (self.cifs_server_name, to_native(exc)), exception=traceback.format_exc())
+                                  (self.cifs_server_name, to_native(exc)), exception=traceback.format_exc())
 
     def delete_cifs_server(self):
-        ''' calling zapi to delete cifs_server '''
+        """
+        calling zapi to create cifs_server
+        """
         if self.cifs_server_name == 'up':
-          self.modify_cifs_server(admin_status='down')
+            self.modify_cifs_server(admin_status='down')
 
         cifs_server_delete = netapp_utils.zapi.NaElement.create_node_with_children('cifs-server-delete')
 
@@ -212,10 +216,10 @@ class NetAppOntapcifs_server(object):
     def modify_cifs_server(self, admin_status):
         """
         RModify the cifs_server.
-        """    
+        """
         cifs_server_modify = netapp_utils.zapi.NaElement.create_node_with_children(
             'cifs-server-modify', **{'cifs-server': self.cifs_server_name,
-             'administrative-status': admin_status, 'vserver': self.vserver})
+                                     'administrative-status': admin_status, 'vserver': self.vserver})
         try:
             self.server.invoke_successfully(cifs_server_modify,
                                             enable_tunneling=True)
@@ -226,7 +230,7 @@ class NetAppOntapcifs_server(object):
     def start_cifs_server(self):
         """
         RModify the cifs_server.
-        """    
+        """
         cifs_server_modify = netapp_utils.zapi.NaElement.create_node_with_children(
             'cifs-server-start')
         try:
@@ -239,7 +243,7 @@ class NetAppOntapcifs_server(object):
     def stop_cifs_server(self):
         """
         RModify the cifs_server.
-        """    
+        """
         cifs_server_modify = netapp_utils.zapi.NaElement.create_node_with_children(
             'cifs-server-stop')
         try:
@@ -249,11 +253,11 @@ class NetAppOntapcifs_server(object):
             self.module.fail_json(msg='Error modifying cifs_server %s: %s' % (self.cifs_server_name, to_native(e)),
                                   exception=traceback.format_exc())
 
-
-
     def apply(self):
-        ''' calling all cifs_server features '''
-        
+        """
+        calling all cifs_server features
+        """
+
         changed = False
         cifs_server_exists = False
         netapp_utils.ems_log_event("na_ontap_cifs_server", self.server)
@@ -267,9 +271,9 @@ class NetAppOntapcifs_server(object):
                 if self.service_state == 'started' and administrative_status == 'down':
                     changed = True
                 if self.service_state == 'stopped' and administrative_status == 'up':
-                    changed = True  
+                    changed = True
             else:
-                # we will delete the CIFs server 
+                # we will delete the CIFs server
                 changed = True
         else:
             if self.state == 'present':
@@ -295,10 +299,10 @@ class NetAppOntapcifs_server(object):
         self.module.exit_json(changed=changed)
 
 
-
 def main():
-    cifs_server = NetAppOntapcifs_server()
+    cifs_server = NetAppOntapcifsServer()
     cifs_server.apply()
+
 
 if __name__ == '__main__':
     main()

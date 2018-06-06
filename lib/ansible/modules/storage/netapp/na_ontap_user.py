@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-# (c) 2017, NetApp, Inc
+# (c) 2018, NetApp, Inc
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
 from __future__ import absolute_import, division, print_function
@@ -18,8 +18,8 @@ module: na_ontap_user
 
 short_description: useradmin configuration and management
 extends_documentation_fragment:
-    - netapp.ontap
-version_added: '2.3'
+    - netapp.na_ontap
+version_added: '2.6'
 author: Sumit Kumar (sumit4@netapp.com)
 
 description:
@@ -67,16 +67,16 @@ options:
     - Password for the user account.
     - It is ignored for creating snmp users, but is required for creating non-snmp users.
     - For an existing user, this value will be used as the new password.
-    default: None
 
   role_name:
     description:
     - The name of the role. Required when C(state=present)
-  
+
   lock_user:
     description:
     - To ock/unlock user.
     required: false
+    type: bool
 
   vserver:
     description:
@@ -122,7 +122,7 @@ class NetAppOntapUser(object):
     """
 
     def __init__(self):
-        self.argument_spec = netapp_utils.ontap_sf_host_argument_spec()
+        self.argument_spec = netapp_utils.na_ontap_host_argument_spec()
         self.argument_spec.update(dict(
             state=dict(required=False, choices=['present', 'absent'], default='present'),
             name=dict(required=True, type='str'),
@@ -134,7 +134,7 @@ class NetAppOntapUser(object):
                                        choices=['community', 'password',
                                                 'publickey', 'domain',
                                                 'nsswitch', 'usm']),
-            set_password=dict(required=False, type='str', default=None),
+            set_password=dict(required=False, type='str'),
             role_name=dict(required=False, type='str'),
             lock_user=dict(required=False, type='bool'),
             vserver=dict(required=True, type='str'),
@@ -163,7 +163,7 @@ class NetAppOntapUser(object):
         if HAS_NETAPP_LIB is False:
             self.module.fail_json(msg="the python NetApp-Lib module is required")
         else:
-            self.server = netapp_utils.setup_ontap_zapi(module=self.module, vserver=self.vserver)
+            self.server = netapp_utils.setup_na_ontap_zapi(module=self.module, vserver=self.vserver)
 
     def get_user(self):
         """
@@ -192,7 +192,7 @@ class NetAppOntapUser(object):
             if result.get_child_by_name('num-records') and \
                     int(result.get_child_content('num-records')) >= 1:
                 interface_attributes = result.get_child_by_name('attributes-list').\
-                                            get_child_by_name('security-login-account-info')
+                    get_child_by_name('security-login-account-info')
                 return_value = {
                     'is_locked': interface_attributes.get_child_content('is-locked')
                 }
@@ -264,7 +264,7 @@ class NetAppOntapUser(object):
         """
         user_lock = netapp_utils.zapi.NaElement.create_node_with_children(
             'security-login-lock', **{'vserver': self.vserver,
-                                        'user-name': self.name})
+                                      'user-name': self.name})
 
         try:
             self.server.invoke_successfully(user_lock,
@@ -294,7 +294,7 @@ class NetAppOntapUser(object):
                 return False
             else:
                 self.module.fail_json(msg='Error unlocking user %s: %s' % (self.name, to_native(error)),
-                                  exception=traceback.format_exc())
+                                      exception=traceback.format_exc())
 
     def delete_user(self):
         user_delete = netapp_utils.zapi.NaElement.create_node_with_children(
@@ -342,7 +342,6 @@ class NetAppOntapUser(object):
         property_changed = False
         password_changed = False
         lock_user_changed = False
-        user_lock_details = None
         netapp_utils.ems_log_event("na_ontap_user", self.server)
         user_exists = self.get_user()
 
@@ -353,7 +352,6 @@ class NetAppOntapUser(object):
                 if self.set_password is not None:
                     password_changed = True
                 if self.lock_user is not None:
-                    # user_lock_details = self.get_user_lock_info()
                     if self.lock_user is True and user_exists['is_locked'] != 'true':
                         lock_user_changed = True
                     elif self.lock_user is False and user_exists['is_locked'] != 'false':
@@ -379,14 +377,16 @@ class NetAppOntapUser(object):
                             if self.lock_user:
                                 self.lock_given_user()
                             else:
-                                self.unlock_given_user() 
+                                self.unlock_given_user()
                 elif self.state == 'absent':
                     self.delete_user()
         self.module.exit_json(changed=changed)
 
+
 def main():
     obj = NetAppOntapUser()
     obj.apply()
+
 
 if __name__ == '__main__':
     main()

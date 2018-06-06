@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-# (c) 2017, NetApp, Inc
+# (c) 2018, NetApp, Inc
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
 from __future__ import absolute_import, division, print_function
@@ -18,8 +18,8 @@ module: na_ontap_qtree
 
 short_description: Manage qtrees
 extends_documentation_fragment:
-    - netapp.ontap
-version_added: '2.3'
+    - netapp.na_ontap
+version_added: '2.6'
 author: Sumit Kumar (sumit4@netapp.com)
 
 description:
@@ -91,9 +91,10 @@ HAS_NETAPP_LIB = netapp_utils.has_netapp_lib()
 class NetAppOntapQTree(object):
 
     def __init__(self):
-        self.argument_spec = netapp_utils.ontap_sf_host_argument_spec()
+        self.argument_spec = netapp_utils.na_ontap_host_argument_spec()
         self.argument_spec.update(dict(
-            state=dict(required=False, choices=['present', 'absent'], default='present'),
+            state=dict(required=False, choices=[
+                       'present', 'absent'], default='present'),
             name=dict(required=True, type='str'),
             new_name=dict(required=False, type='str'),
             flexvol_name=dict(type='str'),
@@ -118,9 +119,11 @@ class NetAppOntapQTree(object):
         self.vserver = p['vserver']
 
         if HAS_NETAPP_LIB is False:
-            self.module.fail_json(msg="the python NetApp-Lib module is required")
+            self.module.fail_json(
+                msg="the python NetApp-Lib module is required")
         else:
-            self.server = netapp_utils.setup_ontap_zapi(module=self.module, vserver=self.vserver)
+            self.server = netapp_utils.setup_na_ontap_zapi(
+                module=self.module, vserver=self.vserver)
 
     def get_qtree(self):
         """
@@ -197,14 +200,14 @@ class NetAppOntapQTree(object):
         qtree_detail = self.get_qtree()
         if qtree_detail:
             qtree_exists = True
-            if self.state == 'absent': #delete
+            if self.state == 'absent':  # delete
                 changed = True
-            else: #rename
+            else:  # rename
                 if self.new_name and self.name != self.new_name:
                     changed = True
                     rename_qtree = True
         else:
-            if self.state == 'present': #create
+            if self.state == 'present':  # create
                 changed = True
         if changed:
             if self.module.check_mode:
@@ -219,6 +222,7 @@ class NetAppOntapQTree(object):
                     self.delete_qtree()
 
         self.module.exit_json(changed=changed)
+
 
 def main():
     v = NetAppOntapQTree()

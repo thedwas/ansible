@@ -1,9 +1,10 @@
 #!/usr/bin/python
-''' this is lun mapping module 
+
+""" this is lun mapping module
 
  (c) 2018, NetApp, Inc
  # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
-'''
+"""
 
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
@@ -14,14 +15,14 @@ ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'supported_by': 'community'}
 
 
-DOCUMENTATION = '''
+DOCUMENTATION = """
 
 module: na_ontap_lun_map
 
-short_description: Manage NetApp Ontap lun maps 
+short_description: Manage NetApp Ontap lun maps
 extends_documentation_fragment:
-    - netapp.ontap
-version_added: '2.4'
+    - netapp.na_ontap
+version_added: '2.6'
 author: chhaya gunawat (chhayag@netapp.com)
 
 description:
@@ -32,7 +33,6 @@ options:
   state:
     description:
     - Whether the specified lun should exist or not.
-    required: false
     choices: ['present', 'absent']
     default: present
 
@@ -50,14 +50,13 @@ options:
     required: true
     description:
     - The name of the vserver to use.
-  
+
   lun_id:
-    required: false
     description:
     - LUN ID assigned for the map.
 
 
-'''
+"""
 
 EXAMPLES = """
 - name: Create lun mapping
@@ -82,8 +81,9 @@ EXAMPLES = """
 """
 
 RETURN = """
-    changed: True/False 
+
 """
+
 import traceback
 
 from ansible.module_utils.basic import AnsibleModule
@@ -97,13 +97,13 @@ class NetAppOntapLUNMap(object):
 
     def __init__(self):
 
-        self.argument_spec = netapp_utils.ontap_sf_host_argument_spec()
+        self.argument_spec = netapp_utils.na_ontap_host_argument_spec()
         self.argument_spec.update(dict(
             state=dict(required=False, choices=['present', 'absent'], default='present'),
             initiator_group_name=dict(required=True, type='str'),
             path=dict(type='str'),
             vserver=dict(required=True, type='str'),
-            lun_id=dict(required=False, type='str',default=None)),
+            lun_id=dict(required=False, type='str', default=None)),
         )
 
         self.module = AnsibleModule(
@@ -121,26 +121,20 @@ class NetAppOntapLUNMap(object):
         self.initiator_group_name = p['initiator_group_name']
         self.path = p['path']
         self.vserver = p['vserver']
-        self.lun_id = p ['lun_id']
+        self.lun_id = p['lun_id']
 
         if HAS_NETAPP_LIB is False:
             self.module.fail_json(msg="the python NetApp-Lib module is required")
         else:
-            self.server = netapp_utils.setup_ontap_zapi(module=self.module, vserver=self.vserver)
-
-
-    
+            self.server = netapp_utils.setup_na_ontap_zapi(module=self.module, vserver=self.vserver)
 
     def get_lun_map(self):
-        #pdb.set_trace()
         """
         Return details about the LUN map
 
         :return: Details about the lun map
         :rtype: dict
         """
-
-  
         lun_info = netapp_utils.zapi.NaElement('lun-map-list-info')
         lun_info.add_new_child('path', self.path)
         result = self.server.invoke_successfully(lun_info, True)
@@ -162,40 +156,33 @@ class NetAppOntapLUNMap(object):
         """
         Create LUN map
         """
-        options = {'path': self.path, 'initiator-group':self.initiator_group_name,
-                  }
+        options = {'path': self.path, 'initiator-group': self.initiator_group_name}
         if self.lun_id is not None:
             options['lun-id'] = self.lun_id
-        lun_map_create = netapp_utils.zapi.NaElement.create_node_with_children(
-                        'lun-map', 
-                        **options)
+        lun_map_create = netapp_utils.zapi.NaElement.create_node_with_children('lun-map', **options)
 
         try:
             self.server.invoke_successfully(lun_map_create, enable_tunneling=True)
         except netapp_utils.zapi.NaApiError as e:
-            self.module.fail_json(msg="Error mapping lun %s of initiator_group_name %s: %s" % (self.path, self.initiator_group_name, to_native(e)),
+            self.module.fail_json(msg="Error mapping lun %s of initiator_group_name %s: %s" %
+                                      (self.path, self.initiator_group_name, to_native(e)),
                                   exception=traceback.format_exc())
 
-   
     def delete_lun_map(self):
         """
         Unmap LUN map
         """
-        lun_map_delete = netapp_utils.zapi.NaElement.create_node_with_children(
-                        'lun-unmap', 
-                        **{'path': self.path,
-                           'initiator-group':self.initiator_group_name,
-                           })    
+        lun_map_delete = netapp_utils.zapi.NaElement.create_node_with_children('lun-unmap', **{'path': self.path, 'initiator-group': self.initiator_group_name})
 
         try:
             self.server.invoke_successfully(lun_map_delete, enable_tunneling=True)
         except netapp_utils.zapi.NaApiError as e:
-            self.module.fail_json(msg="Error unmapping lun %s of initiator_group_name %s: %s" % (self.path, self.initiator_group_name, to_native(e)),
+            self.module.fail_json(msg="Error unmapping lun %s of initiator_group_name %s: %s" %
+                                      (self.path, self.initiator_group_name, to_native(e)),
                                   exception=traceback.format_exc())
 
     def apply(self):
         property_changed = False
-        multiple_properties_changed = False
         size_changed = False
         lun_map_exists = False
         netapp_utils.ems_log_event("na_ontap_lun_map", self.server)
@@ -223,7 +210,7 @@ class NetAppOntapLUNMap(object):
                         self.create_lun_map()
 
                 elif self.state == 'absent':
-                   self.delete_lun_map()
+                    self.delete_lun_map()
 
         changed = property_changed or size_changed
         # TODO: include other details about the lun (size, etc.)

@@ -14,8 +14,8 @@ DOCUMENTATION = '''
 module: na_ontap_volume_clone
 short_description: Manage NetApp Ontap volume clones.
 extends_documentation_fragment:
-    - netapp.ontap
-version_added: '1.0'
+    - netapp.na_ontap
+version_added: '2.6'
 author: Chris Archibald (carchi@netapp.com), Kevin Hutton (khutton@netapp.com)
 description:
 - Create NetApp Ontap volume clones.
@@ -76,25 +76,30 @@ EXAMPLES = """
         parent_snapshot=backup1
 """
 
+RETURN = """
+"""
+
 from ansible.module_utils.basic import AnsibleModule
 import ansible.module_utils.netapp as netapp_utils
 
 HAS_NETAPP_LIB = netapp_utils.has_netapp_lib()
 
+
 class NetAppOntapVolumeClone(object):
     """
         Creates a volume clone
     """
+
     def __init__(self):
         """
             Initialize the NetAppOntapVolumeClone class
         """
-        self.argument_spec = netapp_utils.ontap_sf_host_argument_spec()
+        self.argument_spec = netapp_utils.na_ontap_host_argument_spec()
         self.argument_spec.update(dict(
             state=dict(required=False, choices=['present'], default='present'),
-            parent_volume=dict(required=True, type='str', default=None),
-            volume=dict(required=True, type='str', default=None),
-            vserver=dict(required=True, type='str', default=None),
+            parent_volume=dict(required=True, type='str'),
+            volume=dict(required=True, type='str'),
+            vserver=dict(required=True, type='str'),
             parent_snapshot=dict(required=False, type='str', default=None),
             parent_vserver=dict(required=False, type='str', default=None),
             qos_policy_group_name=dict(required=False, type='str', default=None),
@@ -107,23 +112,23 @@ class NetAppOntapVolumeClone(object):
             supports_check_mode=True
         )
 
-        p = self.module.params
+        parameters = self.module.params
 
         # set up state variables
-        self.state = p['state']
-        self.parent_snapshot = p['parent_snapshot']
-        self.parent_volume = p['parent_volume']
-        self.parent_vserver = p['parent_vserver']
-        self.qos_policy_group_name = p['qos_policy_group_name']
-        self.space_reserve = p['space_reserve']
-        self.volume = p['volume']
-        self.volume_type = p['volume_type']
-        self.vserver = p['vserver']
+        self.state = parameters['state']
+        self.parent_snapshot = parameters['parent_snapshot']
+        self.parent_volume = parameters['parent_volume']
+        self.parent_vserver = parameters['parent_vserver']
+        self.qos_policy_group_name = parameters['qos_policy_group_name']
+        self.space_reserve = parameters['space_reserve']
+        self.volume = parameters['volume']
+        self.volume_type = parameters['volume_type']
+        self.vserver = parameters['vserver']
 
         if HAS_NETAPP_LIB is False:
             self.module.fail_json(msg="the python NetApp-Lib module is required")
         else:
-            self.server = netapp_utils.setup_ontap_zapi(module=self.module, vserver=self.vserver)
+            self.server = netapp_utils.setup_na_ontap_zapi(module=self.module, vserver=self.vserver)
         return
 
     def create_volume_clone(self):
@@ -168,7 +173,7 @@ class NetAppOntapVolumeClone(object):
         changed = False
         netapp_utils.ems_log_event("na_ontap_volume_clone", self.server)
         existing_volume_clone = self.does_volume_clone_exists()
-        if existing_volume_clone is False: #create clone 
+        if existing_volume_clone is False:  # create clone
             changed = True
         if changed:
             if self.module.check_mode:
@@ -178,12 +183,14 @@ class NetAppOntapVolumeClone(object):
 
         self.module.exit_json(changed=changed)
 
+
 def main():
     """
     Creates the NetApp Ontap Volume Clone object and runs the correct play task
     """
-    v = NetAppOntapVolumeClone()
-    v.apply()
+    obj = NetAppOntapVolumeClone()
+    obj.apply()
+
 
 if __name__ == '__main__':
     main()

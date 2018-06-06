@@ -16,10 +16,10 @@ DOCUMENTATION = '''
 
 module: na_ontap_aggregate
 
-short_description: Manage NetApp Ontap aggregates.
+short_description: Manage NetApp ONTAP aggregates.
 extends_documentation_fragment:
-    - netapp.ontap
-version_added: '2.3'
+    - netapp.na_ontap
+version_added: '2.6'
 author: Sumit Kumar (sumit4@netapp.com), Suhas Bangalore Shekar (bsuhas@netapp.com)
 
 description:
@@ -28,13 +28,11 @@ description:
 options:
 
   state:
-    required: true
     description:
     - Whether the specified aggregate should exist or not.
     choices: ['present', 'absent']
     default: 'present'
-    required: false
-  
+
   service_state:
     description:
     - Whether the specified aggregate should be enabled or disabled. Creates aggregate if doesnt exist.
@@ -51,6 +49,10 @@ options:
     description:
     - The name of the aggregate that replaces the current name.
 
+  nodes:
+    description:
+    - List of node for the aggregate
+
   disk_count:
     description:
     - Number of disks to place into the aggregate, including parity disks.
@@ -58,14 +60,14 @@ options:
     - The smallest disks in this pool join the aggregate first, unless the C(disk-size) argument is provided.
     - Either C(disk-count) or C(disks) must be supplied. Range [0..2^31-1].
     - Required when C(state=present).
-  
+
   unmount_volumes:
     required: false
+    type: bool
     description:
-    - If set to "TRUE", this option specifies that all of the volumes hosted by the given aggregate are to be unmounted 
-    - before the offline operation is executed. 
+    - If set to "TRUE", this option specifies that all of the volumes hosted by the given aggregate are to be unmounted
+    - before the offline operation is executed.
     - By default, the system will reject any attempt to offline an aggregate that hosts one or more online volumes.
-    choices: ['true', 'false']
 
 '''
 
@@ -128,10 +130,12 @@ HAS_NETAPP_LIB = netapp_utils.has_netapp_lib()
 
 class NetAppOntapAggregate(object):
     ''' object initialize and class methods '''
+
     def __init__(self):
-        self.argument_spec = netapp_utils.ontap_sf_host_argument_spec()
+        self.argument_spec = netapp_utils.na_ontap_host_argument_spec()
         self.argument_spec.update(dict(
-            state=dict(required=False, choices=['present', 'absent'], default='present'),
+            state=dict(required=False, choices=[
+                       'present', 'absent'], default='present'),
             service_state=dict(required=False, choices=['online', 'offline']),
             name=dict(required=True, type='str'),
             rename=dict(required=False, type='str'),
@@ -160,9 +164,10 @@ class NetAppOntapAggregate(object):
         self.unmount_volumes = parameters['unmount_volumes']
 
         if HAS_NETAPP_LIB is False:
-            self.module.fail_json(msg="the python NetApp-Lib module is required")
+            self.module.fail_json(
+                msg="the python NetApp-Lib module is required")
         else:
-            self.server = netapp_utils.setup_ontap_zapi(module=self.module)
+            self.server = netapp_utils.setup_na_ontap_zapi(module=self.module)
 
     def get_aggr(self):
         """
@@ -190,7 +195,8 @@ class NetAppOntapAggregate(object):
             if to_native(error.code) == "13040":
                 return False
             else:
-                self.module.fail_json(msg=to_native(error), exception=traceback.format_exc())
+                self.module.fail_json(msg=to_native(
+                    error), exception=traceback.format_exc())
 
         if (result.get_child_by_name('num-records') and
                 int(result.get_child_content('num-records')) >= 1):
@@ -214,8 +220,9 @@ class NetAppOntapAggregate(object):
                 return False
             else:
                 self.module.fail_json(msg='Error changing the state of aggregate %s to %s: %s' %
-                                  (self.name, self.service_state, to_native(error)),
-                                  exception=traceback.format_exc())
+                                      (self.name, self.service_state,
+                                       to_native(error)),
+                                      exception=traceback.format_exc())
 
     def aggregate_offline(self):
         """
@@ -235,8 +242,9 @@ class NetAppOntapAggregate(object):
                 return False
             else:
                 self.module.fail_json(msg='Error changing the state of aggregate %s to %s: %s' %
-                                  (self.name, self.service_state, to_native(error)),
-                                  exception=traceback.format_exc())
+                                      (self.name, self.service_state,
+                                       to_native(error)),
+                                      exception=traceback.format_exc())
 
     def create_aggr(self):
         """
@@ -294,7 +302,8 @@ class NetAppOntapAggregate(object):
         aggregate_exists = self.get_aggr()
         rename_aggregate = False
         results = netapp_utils.get_cserver(self.server)
-        cserver = netapp_utils.setup_ontap_zapi(module=self.module, vserver=results)
+        cserver = netapp_utils.setup_na_ontap_zapi(
+            module=self.module, vserver=results)
         netapp_utils.ems_log_event("na_ontap_aggregate", cserver)
 
         # check if anything needs to be changed (add/delete/update)

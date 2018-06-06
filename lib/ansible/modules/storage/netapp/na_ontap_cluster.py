@@ -6,7 +6,6 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
-
 ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['preview'],
                     'supported_by': 'community'}
@@ -16,8 +15,8 @@ DOCUMENTATION = '''
 module: na_ontap_cluster
 short_description: Create/Join ONTAP cluster. Apply license to cluster
 extends_documentation_fragment:
-    - netapp.ontap
-version_added: '1.0'
+    - netapp.na_ontap
+version_added: '2.6'
 author: Suhas Bangalore Shekar (bsuhas@netapp.com), Archana Ganesan (garchana@netapp.com)
 description:
 - Create or join or apply licenses to ONTAP clusters
@@ -67,7 +66,7 @@ EXAMPLES = """
         hostname: "{{ netapp_hostname }}"
         username: "{{ netapp_username }}"
         password: "{{ netapp_password }}"
-     - name: Join cluster
+    - name: Join cluster
       na_ontap_cluster:
         state: present
         cluster_name: FPaaS-A300
@@ -79,20 +78,22 @@ EXAMPLES = """
 
 RETURN = """
 """
+
 import traceback
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils._text import to_native
 import ansible.module_utils.netapp as netapp_utils
 
-
 HAS_NETAPP_LIB = netapp_utils.has_netapp_lib()
 
 
 class NetAppONTAPCluster(object):
-    ''' object initialize and class methods '''
+    """
+    object initialize and class methods
+    """
     def __init__(self):
-        self.argument_spec = netapp_utils.ontap_sf_host_argument_spec()
+        self.argument_spec = netapp_utils.na_ontap_host_argument_spec()
         self.argument_spec.update(dict(
             state=dict(required=False, choices=['present'], default='present'),
             cluster_name=dict(required=False, type='str'),
@@ -126,7 +127,7 @@ class NetAppONTAPCluster(object):
         if HAS_NETAPP_LIB is False:
             self.module.fail_json(msg="the python NetApp-Lib module is required")
         else:
-            self.server = netapp_utils.setup_ontap_zapi(module=self.module)#, cluster=self.cluster_name)
+            self.server = netapp_utils.setup_na_ontap_zapi(module=self.module)
 
     def create_cluster(self):
         """
@@ -136,7 +137,7 @@ class NetAppONTAPCluster(object):
             'cluster-create', **{'cluster-name': self.cluster_name})
 
         try:
-            output = self.server.invoke_successfully(cluster_create,
+            self.server.invoke_successfully(cluster_create,
                                             enable_tunneling=True)
             return True
         except netapp_utils.zapi.NaApiError as error:
@@ -144,9 +145,9 @@ class NetAppONTAPCluster(object):
             if to_native(error.code) == "36503":
                 return False
             else:
-                self.module.fail_json(msg='Error creating cluster %s: %s' \
-                                    % (self.cluster_name, to_native(error)),
-                                    exception=traceback.format_exc())
+                self.module.fail_json(msg='Error creating cluster %s: %s'
+                                      % (self.cluster_name, to_native(error)),
+                                      exception=traceback.format_exc())
 
     def cluster_join(self):
         """
@@ -156,17 +157,16 @@ class NetAppONTAPCluster(object):
             'cluster-join', **{'cluster-ip-address': self.cluster_ip_address})
 
         try:
-            output = self.server.invoke_successfully(cluster_add_node,
-                                            enable_tunneling=True)
+            self.server.invoke_successfully(cluster_add_node, enable_tunneling=True)
             return True
         except netapp_utils.zapi.NaApiError as error:
             # Error 36503 denotes node already being used.
             if to_native(error.code) == "36503":
                 return False
             else:
-                self.module.fail_json(msg='Error adding node to cluster %s: %s' \
-                                % (self.cluster_name, to_native(error)),
-                                exception=traceback.format_exc())
+                self.module.fail_json(msg='Error adding node to cluster %s: %s'
+                                      % (self.cluster_name, to_native(error)),
+                                      exception=traceback.format_exc())
 
     def license_v2_add(self):
         """
@@ -175,13 +175,12 @@ class NetAppONTAPCluster(object):
         license_add = netapp_utils.zapi.NaElement.create_node_with_children('license-v2-add')
         license_add.add_node_with_children('codes', **{'license-code-v2': self.license_code})
         try:
-            output = self.server.invoke_successfully(license_add,
-                                            enable_tunneling=True)
+            self.server.invoke_successfully(license_add, enable_tunneling=True)
 
         except netapp_utils.zapi.NaApiError as error:
-            self.module.fail_json(msg='Error adding license to the cluster %s: %s' \
-                                    % (self.cluster_name, to_native(error)),
-                                    exception=traceback.format_exc())
+            self.module.fail_json(msg='Error adding license to the cluster %s: %s'
+                                  % (self.cluster_name, to_native(error)),
+                                  exception=traceback.format_exc())
 
     def license_v2_delete(self):
         """
@@ -191,24 +190,26 @@ class NetAppONTAPCluster(object):
             'license-v2-delete', **{'package': self.license_package,
                                     'serial-number': self.node_serial_number})
         try:
-            output = self.server.invoke_successfully(license_delete,
-                                            enable_tunneling=True)
+            self.server.invoke_successfully(license_delete, enable_tunneling=True)
         except netapp_utils.zapi.NaApiError as error:
-            self.module.fail_json(msg='Error deleting license from cluster %s : %s' \
-                                    % (self.cluster_name, to_native(error)),
+            self.module.fail_json(msg='Error deleting license from cluster %s : %s'
+                                  % (self.cluster_name, to_native(error)),
                                   exception=traceback.format_exc())
+
     def apply(self):
-        '''Apply action to cluster'''
+        """
+        Apply action to cluster
+        """
         property_changed = False
         create_flag = False
-        join_flag =False
+        join_flag = False
         changed = False
-    
+
         if self.state == 'absent':
             pass
-        elif self.state == 'present': # license add, delete
+        elif self.state == 'present':  # license add, delete
             changed = True
-        
+
         if changed:
             if self.module.check_mode:
                 pass
@@ -229,9 +230,12 @@ class NetAppONTAPCluster(object):
 
 
 def main():
-    ''' Create object and call apply '''
+    """
+    Create object and call apply
+    """
     rule_obj = NetAppONTAPCluster()
     rule_obj.apply()
+
 
 if __name__ == '__main__':
     main()
